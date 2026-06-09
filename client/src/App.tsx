@@ -28,6 +28,7 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
   PhotoIcon,
+  ArrowDownTrayIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
   RectangleStackIcon,
@@ -223,6 +224,14 @@ function App() {
   const [formData, setFormData] = useState<FormData>({ ...emptyForm })
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Import
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importJsonText, setImportJsonText] = useState('')
+  const [importError, setImportError] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{inserted: number, skipped: number, skippedWords: string[], errors: string[], total: number} | null>(null)
+  const [importCopied, setImportCopied] = useState(false)
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; word: string } | null>(null)
@@ -644,9 +653,16 @@ function App() {
       return
     }
     setImportError('')
+    setImportResult(null)
     setIsImporting(true)
     try {
-      const parsedData = JSON.parse(importJsonText)
+      let parsedData = JSON.parse(importJsonText)
+      // Unwrap markdown code blocks if present
+      let cleanText = importJsonText.trim()
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+        parsedData = JSON.parse(cleanText)
+      }
       const res = await fetch(`${API_URL}/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -656,13 +672,37 @@ function App() {
       if (json.success) {
         await fetchVocabularies()
         await fetchMetadata()
-        setShowImportModal(false)
+        setImportResult(json.data)
         setImportJsonText('')
       } else {
         setImportError(json.message || 'Lỗi khi import dữ liệu')
       }
     } catch (e: any) {
-      setImportError('Dữ liệu JSON không hợp lệ: ' + e.message)
+      if (e instanceof SyntaxError) {
+        // Try stripping markdown code blocks
+        try {
+          const cleanText = importJsonText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+          const parsedData = JSON.parse(cleanText)
+          const res = await fetch(`${API_URL}/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parsedData)
+          })
+          const json = await res.json()
+          if (json.success) {
+            await fetchVocabularies()
+            await fetchMetadata()
+            setImportResult(json.data)
+            setImportJsonText('')
+          } else {
+            setImportError(json.message || 'Lỗi khi import dữ liệu')
+          }
+        } catch {
+          setImportError('Dữ liệu JSON không hợp lệ. Hãy đảm bảo dán đúng mảng JSON từ AI.')
+        }
+      } else {
+        setImportError('Lỗi: ' + e.message)
+      }
     } finally {
       setIsImporting(false)
     }
@@ -915,9 +955,14 @@ function App() {
               <h1 className="page-title">Từ vựng</h1>
               <p className="page-subtitle">Quản lý bộ sưu tập từ vựng của bạn</p>
             </div>
-            <button className="btn-primary" onClick={openAddModal}>
-              <PlusIcon className="icon icon-inline" /> Thêm từ mới
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn-import" onClick={() => { setShowImportModal(true); setImportResult(null); setImportError(''); setImportJsonText('') }}>
+                <ArrowDownTrayIcon className="icon icon-inline" /> Import từ vựng
+              </button>
+              <button className="btn-primary" onClick={openAddModal}>
+                <PlusIcon className="icon icon-inline" /> Thêm từ mới
+              </button>
+            </div>
           </div>
 
           {/* STATS CARDS */}
@@ -2230,6 +2275,108 @@ function App() {
           ) : null}
         </main>
       </div>
+
+      {/* ===== IMPORT MODAL ===== */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal import-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><ArrowDownTrayIcon className="icon icon-inline" /> Import từ vựng qua AI</h2>
+              <button className="modal-close" onClick={() => setShowImportModal(false)}><XMarkIcon className="icon" /></button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Step 1: Prompt Template */}
+              <div className="import-step">
+                <div className="import-step-header">
+                  <span className="import-step-number">1</span>
+                  <span className="import-step-title">Copy câu lệnh mẫu gửi cho AI (ChatGPT / Claude / Gemini)</span>
+                </div>
+                <div className="import-prompt-box">
+                  <pre className="import-prompt-text">{`Đóng vai là một chuyên gia tiếng Anh, hãy tạo cho tôi 10 từ vựng tiếng Anh chủ đề [CHỦ ĐỀ] trình độ [A1/A2/B1/B2/C1/C2] theo định dạng JSON array chuẩn như sau. Bạn chỉ trả về mảng JSON, không giải thích gì thêm:\n[\n  {\n    "word": "từ vựng",\n    "type": "word",\n    "pronunciation": "/phiên âm IPA/",\n    "meanings": ["nghĩa 1", "nghĩa 2"],\n    "partOfSpeech": "noun/verb/adjective/adverb",\n    "examples": [{ "en": "câu ví dụ tiếng Anh", "vi": "dịch nghĩa tiếng Việt" }],\n    "topic": "chủ đề",\n    "level": "A1",\n    "synonyms": ["từ đồng nghĩa"],\n    "antonyms": ["từ trái nghĩa"],\n    "note": "ghi chú hoặc mẹo nhớ"\n  }\n]`}</pre>
+                  <button
+                    className={`btn-copy-prompt ${importCopied ? 'copied' : ''}`}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`Đóng vai là một chuyên gia tiếng Anh, hãy tạo cho tôi 10 từ vựng tiếng Anh chủ đề [CHỦ ĐỀ] trình độ [A1/A2/B1/B2/C1/C2] theo định dạng JSON array chuẩn như sau. Bạn chỉ trả về mảng JSON, không giải thích gì thêm:\n[\n  {\n    "word": "từ vựng",\n    "type": "word",\n    "pronunciation": "/phiên âm IPA/",\n    "meanings": ["nghĩa 1", "nghĩa 2"],\n    "partOfSpeech": "noun/verb/adjective/adverb",\n    "examples": [{ "en": "câu ví dụ tiếng Anh", "vi": "dịch nghĩa tiếng Việt" }],\n    "topic": "chủ đề",\n    "level": "A1",\n    "synonyms": ["từ đồng nghĩa"],\n    "antonyms": ["từ trái nghĩa"],\n    "note": "ghi chú hoặc mẹo nhớ"\n  }\n]`)
+                      setImportCopied(true)
+                      setTimeout(() => setImportCopied(false), 2500)
+                    }}
+                  >
+                    {importCopied
+                      ? <><CheckIcon className="icon icon-inline" /> Đã copy!</>
+                      : <><ClipboardDocumentIcon className="icon icon-inline" /> Copy Prompt</>
+                    }
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2: Paste JSON */}
+              <div className="import-step">
+                <div className="import-step-header">
+                  <span className="import-step-number">2</span>
+                  <span className="import-step-title">Dán (paste) dữ liệu JSON mà AI trả về vào đây</span>
+                </div>
+                <textarea
+                  className="import-textarea"
+                  placeholder={`[\n  {\n    "word": "example",\n    "meanings": ["ví dụ"],\n    ...\n  }\n]`}
+                  value={importJsonText}
+                  onChange={e => { setImportJsonText(e.target.value); setImportError(''); setImportResult(null) }}
+                  rows={10}
+                />
+                {importError && (
+                  <div className="import-error">
+                    <ExclamationTriangleIcon className="icon icon-inline" /> {importError}
+                  </div>
+                )}
+              </div>
+
+              {/* Result */}
+              {importResult && (
+                <div className="import-result">
+                  <div className="import-result-header">
+                    <CheckIcon className="icon icon-inline" /> Kết quả Import
+                  </div>
+                  <div className="import-result-stats">
+                    <div className="import-stat success">
+                      <span className="import-stat-value">{importResult.inserted}</span>
+                      <span className="import-stat-label">Đã thêm</span>
+                    </div>
+                    <div className="import-stat warning">
+                      <span className="import-stat-value">{importResult.skipped}</span>
+                      <span className="import-stat-label">Bỏ qua (trùng)</span>
+                    </div>
+                    <div className="import-stat error">
+                      <span className="import-stat-value">{importResult.errors.length}</span>
+                      <span className="import-stat-label">Lỗi</span>
+                    </div>
+                  </div>
+                  {importResult.skippedWords.length > 0 && (
+                    <div className="import-result-detail">
+                      <span className="import-detail-label">Từ bị trùng:</span>
+                      <span className="import-detail-words">{importResult.skippedWords.join(', ')}</span>
+                    </div>
+                  )}
+                  {importResult.errors.length > 0 && (
+                    <div className="import-result-detail errors">
+                      <span className="import-detail-label">Chi tiết lỗi:</span>
+                      {importResult.errors.map((err, i) => (
+                        <span key={i} className="import-error-item">{err}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn-outline" onClick={() => setShowImportModal(false)}>Đóng</button>
+              <button className="btn-primary" onClick={handleImport} disabled={isImporting || !importJsonText.trim()}>
+                {isImporting ? <><span className="spinner-sm"></span> Đang import...</> : <><ArrowDownTrayIcon className="icon icon-inline" /> Import Dữ Liệu</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== ADD/EDIT MODAL ===== */}
       {showModal && (
