@@ -1,0 +1,162 @@
+@startuml TrainEnglish_DB_Schema
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam classFontName "Segoe UI"
+skinparam classHeaderBackgroundColor #1E293B
+skinparam classHeaderFontColor #F8FAFC
+skinparam classBorderColor #475569
+skinparam classBackgroundColor #F1F5F9
+skinparam stereotypeCBackgroundColor #4F46E5
+skinparam arrowColor #6366F1
+skinparam arrowThickness 2
+skinparam packageBackgroundColor #FFFFFF
+skinparam packageBorderColor #CBD5E1
+skinparam noteBorderColor #94A3B8
+skinparam noteBackgroundColor #FFFBEB
+
+title **TrainEnglish — MongoDB Database Schema**\n<size:11>Generated from source code | 3 Collections + 2 Embedded Documents</size>
+
+package "vocabularies" <<collection>> {
+
+  class Vocabulary {
+    **_id** : ObjectId <<PK>>
+    ----
+    word : String <<required, trim, index>>
+    type : String <<enum: "word" | "phrase", default: "word">>
+    pronunciation : String <<trim, default: "">>
+    meanings : String[] <<required>>
+    partOfSpeech : String <<trim, default: "">>
+    examples : Example[] <<embedded>>
+    topic : String <<trim, default: "general", index>>
+    level : String <<enum: "A1"|"A2"|"B1"|"B2"|"C1"|"C2", default: "A1", index>>
+    synonyms : String[] <<default: []>>
+    antonyms : String[] <<default: []>>
+    note : String <<default: "">>
+    imageUrl : String <<default: "">>
+    audioUrl : String <<default: "">>
+    deckIds : ObjectId[] <<ref: Deck, default: [], index>>
+    ----
+    createdAt : Date <<auto>>
+    updatedAt : Date <<auto>>
+    ====
+    <<text index>> { word, meanings, topic }
+  }
+
+}
+
+package "examples" <<embedded>> {
+
+  class Example <<embedded>> {
+    en : String <<required>>
+    vi : String <<required>>
+    ----
+    <i>_id: false</i>
+  }
+
+}
+
+package "decks" <<collection>> {
+
+  class Deck {
+    **_id** : ObjectId <<PK>>
+    ----
+    name : String <<required, trim, unique, index>>
+    description : String <<trim, default: "">>
+    color : String <<trim, default: "#3B82F6">>
+    ----
+    createdAt : Date <<auto>>
+    updatedAt : Date <<auto>>
+  }
+
+}
+
+package "userwordprogresses" <<collection>> {
+
+  class UserWordProgress {
+    **_id** : ObjectId <<PK>>
+    ----
+    userId : ObjectId <<required, index>>
+    wordId : ObjectId <<ref: Vocabulary, required, index>>
+    skills : Skills <<embedded>>
+    ----
+    createdAt : Date <<auto>>
+    updatedAt : Date <<auto>>
+    ====
+    <<unique compound index>> { userId, wordId }
+    <<compound index>> { userId, skills.reading.nextReview }
+    <<compound index>> { userId, skills.writing.nextReview }
+    <<compound index>> { userId, skills.pronunciation.nextReview }
+  }
+
+}
+
+package "skills" <<embedded>> {
+
+  class Skills <<embedded>> {
+    reading : SkillProgress
+    writing : SkillProgress
+    pronunciation : SkillProgress
+    ----
+    <i>_id: false</i>
+  }
+
+  class SkillProgress <<embedded>> {
+    points : Number <<default: 0, min: 0>>
+    nextReview : Date <<default: Date.now>>
+    ----
+    <i>_id: false</i>
+  }
+
+}
+
+' ============================
+'  RELATIONSHIPS
+' ============================
+
+Vocabulary "1" *-down- "0..*" Example : <<contains>>
+
+Vocabulary "0..*" -right- "0..*" Deck : <<deckIds[]\nmany-to-many>>
+
+UserWordProgress "0..*" -left-> "1" Vocabulary : <<wordId\nreference>>
+
+UserWordProgress "1" *-down- "1" Skills : <<contains>>
+
+Skills "1" *-down- "1" SkillProgress : reading
+Skills "1" *-down- "1" SkillProgress : writing
+Skills "1" *-down- "1" SkillProgress : pronunciation
+
+' ============================
+'  NOTES
+' ============================
+
+note bottom of Vocabulary
+  **Collection: vocabularies**
+  Từ vựng chính của ứng dụng.
+  Một từ có thể thuộc nhiều Deck
+  thông qua mảng deckIds[].
+  Hỗ trợ full-text search trên
+  word, meanings, topic.
+end note
+
+note bottom of UserWordProgress
+  **Collection: userwordprogresses**
+  Spaced Repetition System (SRS).
+  Mỗi cặp (userId, wordId) là unique.
+  Theo dõi 3 kỹ năng độc lập:
+  • Reading — nhớ nghĩa / đọc hiểu
+  • Writing — viết / chính tả
+  • Pronunciation — phát âm
+  Query ôn tập:
+  skills.<skill>.nextReview <= now()
+end note
+
+note bottom of Deck
+  **Collection: decks**
+  Bộ thẻ nhóm từ vựng.
+  wordCount được tính
+  aggregate runtime,
+  không lưu trong DB.
+end note
+
+@enduml
