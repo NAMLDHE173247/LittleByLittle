@@ -40,14 +40,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: { Authorization: `Bearer ${t}` },
       })
       const json = await res.json()
-      if (json.success) {
+      if (res.ok && json.success) {
         setUser(json.data)
         return true
       } else {
-        // Token invalid
-        localStorage.removeItem('lbl_token')
-        setToken(null)
-        setUser(null)
+        // Chỉ xóa token nếu là lỗi xác thực (401 Unauthorized, 403 Forbidden)
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('lbl_token')
+          setToken(null)
+          setUser(null)
+        }
         return false
       }
     } catch {

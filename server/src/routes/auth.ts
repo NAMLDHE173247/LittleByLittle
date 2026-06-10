@@ -1,9 +1,22 @@
 import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import rateLimit from "express-rate-limit";
 import User from "../models/User";
 import { authenticate, AuthRequest } from "../middleware/auth";
 
 const router = Router();
+
+// Middleware chống Brute-force (Giới hạn số lần gọi API đăng nhập/đăng ký)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 phút
+  max: 10, // Tối đa 10 lần thử từ 1 IP trong 15 phút
+  message: { 
+    success: false, 
+    message: "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau 15 phút." 
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * Tạo JWT token
@@ -28,15 +41,24 @@ const generateToken = (user: {
 // ================================================================
 // POST /api/auth/register — Đăng ký tài khoản mới
 // ================================================================
-router.post("/register", async (req: Request, res: Response) => {
+router.post("/register", authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password, name } = req.body;
 
-    // Validate
+    // Validate exist
     if (!email || !password || !name) {
       res.status(400).json({
         success: false,
         message: "Vui lòng điền đầy đủ email, mật khẩu và tên",
+      });
+      return;
+    }
+
+    // Validate type (tránh crash ứng dụng nếu dữ liệu gửi lên không phải String)
+    if (typeof email !== "string" || typeof password !== "string" || typeof name !== "string") {
+      res.status(400).json({
+        success: false,
+        message: "Dữ liệu đầu vào không hợp lệ",
       });
       return;
     }
@@ -110,7 +132,7 @@ router.post("/register", async (req: Request, res: Response) => {
 // ================================================================
 // POST /api/auth/login — Đăng nhập
 // ================================================================
-router.post("/login", async (req: Request, res: Response) => {
+router.post("/login", authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -118,6 +140,15 @@ router.post("/login", async (req: Request, res: Response) => {
       res.status(400).json({
         success: false,
         message: "Vui lòng nhập email và mật khẩu",
+      });
+      return;
+    }
+
+    // Validate type
+    if (typeof email !== "string" || typeof password !== "string") {
+      res.status(400).json({
+        success: false,
+        message: "Dữ liệu đầu vào không hợp lệ",
       });
       return;
     }
@@ -219,6 +250,14 @@ router.put(
         res.status(400).json({
           success: false,
           message: "Vui lòng nhập mật khẩu hiện tại và mật khẩu mới",
+        });
+        return;
+      }
+
+      if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+        res.status(400).json({
+          success: false,
+          message: "Dữ liệu đầu vào không hợp lệ",
         });
         return;
       }
