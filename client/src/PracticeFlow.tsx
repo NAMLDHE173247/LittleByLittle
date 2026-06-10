@@ -11,6 +11,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon
 } from '@heroicons/react/24/outline'
+import { useAuth } from './AuthContext'
 
 const PROGRESS_API_URL = 'http://localhost:5000/api/progress'
 
@@ -19,6 +20,7 @@ interface PracticeFlowProps {
 }
 
 export default function PracticeFlow({ onExit }: PracticeFlowProps) {
+  const { authHeaders } = useAuth()
   // Setup state
   const [step, setStep] = useState<number>(0) // 0 = Setup, 1-6 = Steps, 7 = Complete
   const [wordCount, setWordCount] = useState<number>(8)
@@ -95,7 +97,7 @@ export default function PracticeFlow({ onExit }: PracticeFlowProps) {
     if (enablePoints) {
        fetch(`${PROGRESS_API_URL}/review`, {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
+         headers: { 'Content-Type': 'application/json', ...authHeaders() },
          body: JSON.stringify({ wordId: currentQuizWord._id, skill: 'recall', correct: isCorrect })
        }).catch(err => console.error(err))
     }
@@ -160,7 +162,7 @@ export default function PracticeFlow({ onExit }: PracticeFlowProps) {
     if (enablePoints) {
        fetch(`${PROGRESS_API_URL}/review`, {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
+         headers: { 'Content-Type': 'application/json', ...authHeaders() },
          body: JSON.stringify({ wordId: currentAudioQuizWord._id, skill: 'listening', correct: isCorrect })
        }).catch(err => console.error(err))
     }
@@ -221,7 +223,7 @@ export default function PracticeFlow({ onExit }: PracticeFlowProps) {
     if (enablePoints) {
        fetch(`${PROGRESS_API_URL}/review`, {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
+         headers: { 'Content-Type': 'application/json', ...authHeaders() },
          body: JSON.stringify({ wordId: currentTypingWord._id, skill: 'writing', correct: isCorrect })
        }).catch(err => console.error(err))
     }
@@ -306,7 +308,7 @@ export default function PracticeFlow({ onExit }: PracticeFlowProps) {
     if (enablePoints) {
        fetch(`${PROGRESS_API_URL}/review`, {
          method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
+         headers: { 'Content-Type': 'application/json', ...authHeaders() },
          body: JSON.stringify({ wordId: currentSpeakingWord._id, skill: 'pronunciation', correct: isCorrect })
        }).catch(err => console.error(err))
     }
@@ -341,7 +343,7 @@ export default function PracticeFlow({ onExit }: PracticeFlowProps) {
 
     setLoading(true)
     try {
-      const res = await fetch(`${PROGRESS_API_URL}/practice-words?count=${finalCount}`)
+      const res = await fetch(`${PROGRESS_API_URL}/practice-words?count=${finalCount}`, { headers: authHeaders() })
       const json = await res.json()
       if (json.success && json.data.length > 0) {
         setWords(json.data)

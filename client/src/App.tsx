@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import './App.css'
 import QuizPage from './QuizPage'
+import { AuthProvider, useAuth } from './AuthContext'
+import { LoginPage } from './AuthPages'
 
 import {
   AcademicCapIcon,
@@ -48,6 +50,7 @@ import {
 } from '@heroicons/react/24/solid'
 
 import PracticeFlow from './PracticeFlow'
+import { ArrowRightStartOnRectangleIcon } from '@heroicons/react/24/outline'
 
 const API_URL = 'http://localhost:5000/api/vocabulary'
 const DECK_API_URL = 'http://localhost:5000/api/decks'
@@ -165,7 +168,25 @@ const menuItems = [
 ]
 
 // ===== MAIN APP =====
-function App() {
+function AppContent() {
+  const { user, logout, isAdmin, authHeaders, loading: authLoading } = useAuth()
+  const darkModeInit = localStorage.getItem('theme') === 'dark'
+
+  // Show login page if not authenticated
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: darkModeInit ? '#0f172a' : '#f1f5f9' }}>
+        <div style={{ textAlign: 'center', color: darkModeInit ? '#94a3b8' : '#64748b' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📚</div>
+          <div>Đang tải...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage darkMode={darkModeInit} />
+  }
   const [vocabularies, setVocabularies] = useState<VocabularyItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -303,7 +324,7 @@ function App() {
 
   const fetchMetadata = async () => {
     try {
-      const res = await fetch(`${API_URL}/metadata`)
+      const res = await fetch(`${API_URL}/metadata`, { headers: authHeaders() })
       const json = await res.json()
       if (json.success) setMetadata(json.data)
     } catch { /* silent */ }
@@ -324,7 +345,7 @@ function App() {
         sortBy: sortField,
         sortDir: sortDir
       })
-      const res = await fetch(`${API_URL}?${params}`)
+      const res = await fetch(`${API_URL}?${params}`, { headers: authHeaders() })
       const json = await res.json()
       if (json.success) {
         setVocabularies(json.data)
@@ -343,7 +364,7 @@ function App() {
   const fetchProgress = async () => {
     setProgressLoading(true)
     try {
-      const res = await fetch(`${PROGRESS_API_URL}/stats`)
+      const res = await fetch(`${PROGRESS_API_URL}/stats`, { headers: authHeaders() })
       const json = await res.json()
       if (json.success) setProgressData(json.data)
     } catch { /* silent */ }
@@ -353,7 +374,7 @@ function App() {
   // Refetch stats when switching to statistics tab
   useEffect(() => {
     if (activeMenu === 'statistics' || activeMenu === 'practice') {
-      fetch(`${PROGRESS_API_URL}/stats`)
+      fetch(`${PROGRESS_API_URL}/stats`, { headers: authHeaders() })
         .then(res => res.json())
         .then(json => {
           if (json.success) setProgressData(json.data)
@@ -371,7 +392,7 @@ function App() {
       const p = pageOverride ?? masteryPage
       const sk = skillOverride ?? masterySkillFilter
       const params = new URLSearchParams({ tier: t, search: s, sort: so, page: String(p), limit: '15', skill: sk })
-      const res = await fetch(`${PROGRESS_API_URL}/words?${params}`)
+      const res = await fetch(`${PROGRESS_API_URL}/words?${params}`, { headers: authHeaders() })
       const json = await res.json()
       if (json.success) {
         setMasteryWords(json.data.words)
@@ -386,7 +407,7 @@ function App() {
     try {
       await fetch(`${PROGRESS_API_URL}/adjust`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ wordId, skill, amount })
       })
       await fetchMasteryWords()
@@ -395,7 +416,7 @@ function App() {
 
   const clearWordProgress = async (wordId: string) => {
     try {
-      await fetch(`${PROGRESS_API_URL}/clear/${wordId}`, { method: 'DELETE' })
+      await fetch(`${PROGRESS_API_URL}/clear/${wordId}`, { method: 'DELETE', headers: authHeaders() })
       await fetchMasteryWords()
     } catch { /* silent */ }
   }
@@ -404,7 +425,7 @@ function App() {
     if (!confirm('Bạn có chắc muốn xóa TOÀN BỘ tiến độ học tập?')) return
     setClearingProgress(true)
     try {
-      await fetch(`${PROGRESS_API_URL}/clear`, { method: 'DELETE' })
+      await fetch(`${PROGRESS_API_URL}/clear`, { method: 'DELETE', headers: authHeaders() })
       await fetchMasteryWords()
       await fetchProgress()
     } catch { /* silent */ }
@@ -479,7 +500,7 @@ function App() {
   const seedDemoData = async () => {
     setSeedingDemo(true)
     try {
-      const res = await fetch(`${PROGRESS_API_URL}/seed-demo`, { method: 'POST' })
+      const res = await fetch(`${PROGRESS_API_URL}/seed-demo`, { method: 'POST', headers: authHeaders() })
       const json = await res.json()
       if (json.success) {
         await fetchProgress()
@@ -490,7 +511,7 @@ function App() {
 
   const fetchDecks = async () => {
     try {
-      const res = await fetch(DECK_API_URL)
+      const res = await fetch(DECK_API_URL, { headers: authHeaders() })
       const json = await res.json()
       if (json.success) setDecks(json.data)
     } catch { /* silent */ }
@@ -508,7 +529,7 @@ function App() {
       const method = editingDeck ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(deckForm),
       })
       const json = await res.json()
@@ -529,7 +550,7 @@ function App() {
     if (!deleteDeckTarget) return
     setDeleting(true)
     try {
-      const res = await fetch(`${DECK_API_URL}/${deleteDeckTarget._id}`, { method: 'DELETE' })
+      const res = await fetch(`${DECK_API_URL}/${deleteDeckTarget._id}`, { method: 'DELETE', headers: authHeaders() })
       const json = await res.json()
       if (json.success) {
         await fetchDecks()
@@ -547,7 +568,7 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/${quickDeckVocab._id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ deckIds: quickDeckIds })
       })
       const json = await res.json()
@@ -608,7 +629,7 @@ function App() {
       const method = editingId ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(body),
       })
       const json = await res.json()
@@ -632,7 +653,7 @@ function App() {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const res = await fetch(`${API_URL}/${deleteTarget.id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_URL}/${deleteTarget.id}`, { method: 'DELETE', headers: authHeaders() })
       const json = await res.json()
       if (json.success) {
         await fetchVocabularies()
@@ -665,7 +686,7 @@ function App() {
       }
       const res = await fetch(`${API_URL}/bulk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(parsedData)
       })
       const json = await res.json()
@@ -685,7 +706,7 @@ function App() {
           const parsedData = JSON.parse(cleanText)
           const res = await fetch(`${API_URL}/bulk`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify(parsedData)
           })
           const json = await res.json()
@@ -714,7 +735,7 @@ function App() {
     try {
       const res = await fetch(API_URL, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ ids: selectedRows }),
       })
       const json = await res.json()
@@ -916,18 +937,18 @@ function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-user" title={sidebarCollapsed ? "Nam Lê" : undefined}>
+          <div className="sidebar-user" title={sidebarCollapsed ? (user?.name || 'User') : undefined}>
             <div className="avatar-circle">
-              <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Nam&backgroundColor=4ade80" alt="avatar" style={{width: '100%', height: '100%', borderRadius: '50%'}} />
+              <img src={`https://api.dicebear.com/7.x/notionists/svg?seed=${user?.name || 'User'}&backgroundColor=4ade80`} alt="avatar" style={{width: '100%', height: '100%', borderRadius: '50%'}} />
             </div>
             {!sidebarCollapsed && (
               <>
                 <div className="user-info">
-                  <span className="user-name">Nam Lê</span>
-                  <span className="user-plan">Pro</span>
+                  <span className="user-name">{user?.name || 'User'}</span>
+                  <span className="user-plan">{user?.role === 'admin' ? 'Admin' : 'User'}</span>
                 </div>
-                <button className="user-settings-btn" title="Cài đặt">
-                  <Cog6ToothIcon className="icon" />
+                <button className="user-settings-btn" title="Đăng xuất" onClick={logout} style={{color: '#ef4444'}}>
+                  <ArrowRightStartOnRectangleIcon className="icon" />
                 </button>
               </>
             )}
@@ -2882,5 +2903,11 @@ function App() {
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  )
+}
 // Quiz module refactored to QuizPage.tsx

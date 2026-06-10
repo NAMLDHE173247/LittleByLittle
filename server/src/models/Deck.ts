@@ -7,6 +7,8 @@ export interface IDeck extends Document {
   description: string;
   // Màu sắc hiển thị (hex color)
   color: string;
+  // Người tạo deck
+  userId: mongoose.Types.ObjectId;
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
@@ -18,7 +20,6 @@ const DeckSchema = new Schema<IDeck>(
       type: String,
       required: [true, "Deck name is required"],
       trim: true,
-      unique: true,
       index: true,
     },
     description: {
@@ -31,11 +32,20 @@ const DeckSchema = new Schema<IDeck>(
       trim: true,
       default: "#3B82F6",
     },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "User ID is required"],
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Compound unique: mỗi user không được tạo 2 deck cùng tên
+DeckSchema.index({ userId: 1, name: 1 }, { unique: true });
 
 const Deck = mongoose.model<IDeck>("Deck", DeckSchema);
 

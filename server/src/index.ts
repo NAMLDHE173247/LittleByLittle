@@ -5,6 +5,7 @@ import connectDB from "./config/database";
 import vocabularyRoutes from "./routes/vocabulary";
 import deckRoutes from "./routes/deck";
 import progressRoutes from "./routes/progress";
+import authRoutes from "./routes/auth";
 
 // Load environment variables
 dotenv.config();
@@ -21,6 +22,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
+app.use("/api/auth", authRoutes);
 app.use("/api/vocabulary", vocabularyRoutes);
 app.use("/api/decks", deckRoutes);
 app.use("/api/progress", progressRoutes);
@@ -37,4 +39,3 @@ connectDB().then(() => {
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   });
 });
-

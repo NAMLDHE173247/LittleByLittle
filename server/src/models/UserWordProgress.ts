@@ -44,6 +44,7 @@ const UserWordProgressSchema = new Schema<IUserWordProgress>(
   {
     userId: {
       type: Schema.Types.ObjectId,
+      ref: "User",
       required: [true, "User ID is required"],
       index: true,
     },

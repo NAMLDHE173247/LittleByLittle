@@ -1,10 +1,14 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import Vocabulary from "../models/Vocabulary";
+import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
+// All vocabulary routes require authentication
+router.use(authenticate as any);
+
 // GET /api/vocabulary/metadata - Lấy siêu dữ liệu cho bộ lọc
-router.get("/metadata", async (_req: Request, res: Response) => {
+router.get("/metadata", async (_req: AuthRequest, res: Response) => {
   try {
     const totalWords = await Vocabulary.countDocuments({ type: "word" });
     const totalPhrases = await Vocabulary.countDocuments({ type: "phrase" });
@@ -30,7 +34,7 @@ router.get("/metadata", async (_req: Request, res: Response) => {
 });
 
 // GET /api/vocabulary - Lấy từ vựng có phân trang và bộ lọc
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", async (req: AuthRequest, res: Response) => {
   try {
     const {
       page = "1",
@@ -89,8 +93,8 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/vocabulary/bulk - Import nhiều từ vựng cùng lúc
-router.post("/bulk", async (req: Request, res: Response) => {
+// POST /api/vocabulary/bulk - Import nhiều từ vựng cùng lúc (Admin only)
+router.post("/bulk", requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     // Accept both array format and { words: [...] } format
     let words: any[] = [];
@@ -223,8 +227,8 @@ router.post("/bulk", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/vocabulary - Thêm 1 từ mới
-router.post("/", async (req: Request, res: Response) => {
+// POST /api/vocabulary - Thêm 1 từ mới (Admin only)
+router.post("/", requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const vocabulary = new Vocabulary(req.body);
     await vocabulary.save();
@@ -239,8 +243,8 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/vocabulary/:id - Cập nhật 1 từ vựng
-router.put("/:id", async (req: Request, res: Response) => {
+// PUT /api/vocabulary/:id - Cập nhật 1 từ vựng (Admin only)
+router.put("/:id", requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const vocabulary = await Vocabulary.findByIdAndUpdate(
       req.params.id,
@@ -262,8 +266,8 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/vocabulary/:id - Xoá 1 từ vựng
-router.delete("/:id", async (req: Request, res: Response) => {
+// DELETE /api/vocabulary/:id - Xoá 1 từ vựng (Admin only)
+router.delete("/:id", requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const vocabulary = await Vocabulary.findByIdAndDelete(req.params.id);
     if (!vocabulary) {
@@ -276,8 +280,8 @@ router.delete("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/vocabulary - Xoá nhiều từ vựng
-router.delete("/", async (req: Request, res: Response) => {
+// DELETE /api/vocabulary - Xoá nhiều từ vựng (Admin only)
+router.delete("/", requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {

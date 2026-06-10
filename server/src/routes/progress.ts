@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import mongoose from "mongoose";
 import UserWordProgress from "../models/UserWordProgress";
 import Vocabulary from "../models/Vocabulary";
@@ -7,11 +7,12 @@ import {
   calculateAnswerPoints,
   getNextReviewDate,
 } from "../utils/decayCalculator";
+import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
-// Hardcoded userId for now (single user mode)
-const DEFAULT_USER_ID = "000000000000000000000001";
+// All progress routes require authentication
+router.use(authenticate as any);
 
 // ===== HELPER: Apply decay to all overdue records =====
 async function applyDecayBatch(userId: string) {
@@ -62,15 +63,17 @@ async function applyDecayBatch(userId: string) {
 // ================================================================
 // GET /api/progress/stats — Thống kê tổng quan (có apply decay)
 // ================================================================
-router.get("/stats", async (_req: Request, res: Response) => {
+router.get("/stats", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
+
     // 1. Apply decay trước khi tính stats
-    const decaySummary = await applyDecayBatch(DEFAULT_USER_ID);
+    const decaySummary = await applyDecayBatch(userId);
 
     // 2. Đọc lại data sau decay
     const totalWords = await Vocabulary.countDocuments();
     const progresses = await UserWordProgress.find({
-      userId: DEFAULT_USER_ID,
+      userId,
     });
 
     const now = new Date();
@@ -141,7 +144,7 @@ router.get("/stats", async (_req: Request, res: Response) => {
 
     // Recently practiced words (last 10)
     const recentProgresses = await UserWordProgress.find({
-      userId: DEFAULT_USER_ID,
+      userId,
     })
       .sort({ updatedAt: -1 })
       .limit(10)
@@ -194,8 +197,9 @@ router.get("/stats", async (_req: Request, res: Response) => {
 // ================================================================
 // GET /api/progress/due — Lấy danh sách từ cần ôn tập
 // ================================================================
-router.get("/due", async (req: Request, res: Response) => {
+router.get("/due", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const skill = (req.query.skill as string) || "recall";
     const limit = parseInt(req.query.limit as string) || 10;
     const now = new Date();
@@ -214,7 +218,7 @@ router.get("/due", async (req: Request, res: Response) => {
     const pointsField = `skills.${skill}.points`;
 
     const dueWords = await UserWordProgress.find({
-      userId: DEFAULT_USER_ID,
+      userId,
       [overdueField]: { $lte: now },
       [pointsField]: { $gt: 0 },
     })
@@ -224,7 +228,7 @@ router.get("/due", async (req: Request, res: Response) => {
 
     // Also include words never started (no progress record)
     const wordsWithProgress = await UserWordProgress.find({
-      userId: DEFAULT_USER_ID,
+      userId,
     }).select("wordId");
     const progressWordIds = wordsWithProgress.map((p) => p.wordId.toString());
 
@@ -274,16 +278,17 @@ router.get("/due", async (req: Request, res: Response) => {
 // ================================================================
 // GET /api/progress/practice-words — Lấy N từ có độ thông thạo thấp nhất
 // ================================================================
-router.get("/practice-words", async (req: Request, res: Response) => {
+router.get("/practice-words", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const count = parseInt(req.query.count as string) || 8;
-    await applyDecayBatch(DEFAULT_USER_ID);
+    await applyDecayBatch(userId);
 
     // 1. Lấy tất cả từ vựng
     const allVocabs = await Vocabulary.find().lean();
     
     // 2. Lấy tất cả tiến độ
-    const progresses = await UserWordProgress.find({ userId: DEFAULT_USER_ID }).lean();
+    const progresses = await UserWordProgress.find({ userId }).lean();
     const progressMap = new Map(progresses.map((p) => [p.wordId.toString(), p]));
 
     // 3. Tính điểm overall cho mỗi từ
@@ -336,8 +341,9 @@ router.get("/practice-words", async (req: Request, res: Response) => {
 // ================================================================
 // POST /api/progress/review — Ôn tập 1 từ (cập nhật điểm)
 // ================================================================
-router.post("/review", async (req: Request, res: Response) => {
+router.post("/review", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const { wordId, skill, correct } = req.body;
 
     // Validate
@@ -358,18 +364,18 @@ router.post("/review", async (req: Request, res: Response) => {
       return;
     }
 
-    const userId = new mongoose.Types.ObjectId(DEFAULT_USER_ID);
+    const userObjId = new mongoose.Types.ObjectId(userId);
     const wordObjId = new mongoose.Types.ObjectId(wordId);
 
     // Find or create progress record
     let progress = await UserWordProgress.findOne({
-      userId,
+      userId: userObjId,
       wordId: wordObjId,
     });
 
     if (!progress) {
       progress = await UserWordProgress.create({
-        userId,
+        userId: userObjId,
         wordId: wordObjId,
         skills: {
           recall: { points: 0, nextReview: new Date() },
@@ -435,9 +441,10 @@ router.post("/review", async (req: Request, res: Response) => {
 // ================================================================
 // POST /api/progress/apply-decay — Chạy decay thủ công (admin/debug)
 // ================================================================
-router.post("/apply-decay", async (_req: Request, res: Response) => {
+router.post("/apply-decay", async (req: AuthRequest, res: Response) => {
   try {
-    const result = await applyDecayBatch(DEFAULT_USER_ID);
+    const userId = req.user!.id;
+    const result = await applyDecayBatch(userId);
 
     res.json({
       success: true,
@@ -454,8 +461,9 @@ router.post("/apply-decay", async (_req: Request, res: Response) => {
 // ================================================================
 // POST /api/progress/seed-demo — Tạo dữ liệu demo cho skill proficiency
 // ================================================================
-router.post("/seed-demo", async (_req: Request, res: Response) => {
+router.post("/seed-demo", requireAdmin as any, async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const vocabularies = await Vocabulary.find().limit(50);
     if (vocabularies.length === 0) {
       res
@@ -464,7 +472,7 @@ router.post("/seed-demo", async (_req: Request, res: Response) => {
       return;
     }
 
-    const userId = new mongoose.Types.ObjectId(DEFAULT_USER_ID);
+    const userObjId = new mongoose.Types.ObjectId(userId);
 
     let created = 0;
     let skipped = 0;
@@ -472,7 +480,7 @@ router.post("/seed-demo", async (_req: Request, res: Response) => {
     for (const vocab of vocabularies) {
       // Check if progress already exists
       const existing = await UserWordProgress.findOne({
-        userId,
+        userId: userObjId,
         wordId: vocab._id,
       });
       if (existing) {
@@ -520,7 +528,7 @@ router.post("/seed-demo", async (_req: Request, res: Response) => {
       };
 
       await UserWordProgress.create({
-        userId,
+        userId: userObjId,
         wordId: vocab._id,
         skills: {
           recall: { points: recallPts, nextReview: makeReviewDate() },
@@ -547,8 +555,9 @@ router.post("/seed-demo", async (_req: Request, res: Response) => {
 // ================================================================
 // GET /api/progress/words — Danh sách từ vựng kèm điểm + filter
 // ================================================================
-router.get("/words", async (req: Request, res: Response) => {
+router.get("/words", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const {
       tier,
       search,
@@ -562,7 +571,7 @@ router.get("/words", async (req: Request, res: Response) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
 
     // 1. Apply decay first
-    await applyDecayBatch(DEFAULT_USER_ID);
+    await applyDecayBatch(userId);
 
     // 2. Get all vocabularies
     const searchFilter: any = {};
@@ -575,7 +584,7 @@ router.get("/words", async (req: Request, res: Response) => {
 
     // 3. Get all progress records
     const progresses = await UserWordProgress.find({
-      userId: DEFAULT_USER_ID,
+      userId,
     }).lean();
     const progressMap = new Map(
       progresses.map((p) => [p.wordId.toString(), p])
@@ -679,8 +688,9 @@ router.get("/words", async (req: Request, res: Response) => {
 // ================================================================
 // PATCH /api/progress/adjust — Tăng/giảm điểm thủ công
 // ================================================================
-router.patch("/adjust", async (req: Request, res: Response) => {
+router.patch("/adjust", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const { wordId, skill, amount } = req.body;
 
     if (!wordId || !skill || typeof amount !== "number") {
@@ -700,14 +710,14 @@ router.patch("/adjust", async (req: Request, res: Response) => {
       return;
     }
 
-    const userId = new mongoose.Types.ObjectId(DEFAULT_USER_ID);
+    const userObjId = new mongoose.Types.ObjectId(userId);
     const wordObjId = new mongoose.Types.ObjectId(wordId);
 
-    let progress = await UserWordProgress.findOne({ userId, wordId: wordObjId });
+    let progress = await UserWordProgress.findOne({ userId: userObjId, wordId: wordObjId });
 
     if (!progress) {
       progress = await UserWordProgress.create({
-        userId,
+        userId: userObjId,
         wordId: wordObjId,
         skills: {
           recall: { points: 0, nextReview: new Date() },
@@ -751,10 +761,11 @@ router.patch("/adjust", async (req: Request, res: Response) => {
 // ================================================================
 // DELETE /api/progress/clear — Xóa tiến độ (toàn bộ hoặc 1 từ)
 // ================================================================
-router.delete("/clear", async (_req: Request, res: Response) => {
+router.delete("/clear", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const result = await UserWordProgress.deleteMany({
-      userId: DEFAULT_USER_ID,
+      userId,
     });
     res.json({
       success: true,
@@ -766,11 +777,12 @@ router.delete("/clear", async (_req: Request, res: Response) => {
   }
 });
 
-router.delete("/clear/:wordId", async (req: Request, res: Response) => {
+router.delete("/clear/:wordId", async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.id;
     const { wordId } = req.params;
     const result = await UserWordProgress.deleteOne({
-      userId: DEFAULT_USER_ID,
+      userId,
       wordId: new mongoose.Types.ObjectId(wordId),
     });
     res.json({
