@@ -148,6 +148,10 @@ export function RegisterPage({ darkMode, onBack }: RegisterPageProps) {
     const result = await register(name.trim(), email.trim(), password)
     if (!result.success) {
       setError(result.message)
+    } else {
+      // Đăng ký thành công, thông báo cho người dùng biết cần chờ duyệt
+      alert(result.message || "Đăng ký thành công! Vui lòng chờ admin duyệt tài khoản.")
+      onBack() // Chuyển về màn hình đăng nhập
     }
     setLoading(false)
   }

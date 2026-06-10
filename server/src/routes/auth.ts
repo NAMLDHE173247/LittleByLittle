@@ -81,33 +81,18 @@ router.post("/register", authLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // Create user (role mặc định là 'user')
+    // Create user (role mặc định là 'user', status mặc định là 'pending')
     const user = await User.create({
       email: email.toLowerCase().trim(),
       password,
       name: name.trim(),
       role: "user",
-    });
-
-    // Generate token
-    const token = generateToken({
-      _id: user._id.toString(),
-      email: user.email,
-      role: user.role,
+      status: "pending",
     });
 
     res.status(201).json({
       success: true,
-      message: "Đăng ký thành công!",
-      data: {
-        token,
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        },
-      },
+      message: "Đăng ký thành công. Vui lòng chờ admin duyệt.",
     });
   } catch (error: any) {
     if (error.name === "ValidationError") {
@@ -172,6 +157,23 @@ router.post("/login", authLimiter, async (req: Request, res: Response) => {
       res.status(401).json({
         success: false,
         message: "Email hoặc mật khẩu không đúng",
+      });
+      return;
+    }
+
+    // Check status
+    if (user.status === "pending") {
+      res.status(403).json({
+        success: false,
+        message: "Tài khoản của bạn đang chờ Admin duyệt.",
+      });
+      return;
+    }
+    
+    if (user.status === "rejected") {
+      res.status(403).json({
+        success: false,
+        message: "Tài khoản của bạn đã bị từ chối hoặc khoá.",
       });
       return;
     }

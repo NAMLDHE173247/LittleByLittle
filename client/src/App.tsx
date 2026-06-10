@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import './App.css'
 import QuizPage from './QuizPage'
+import UserManagementPage from './UserManagementPage'
 import { AuthProvider, useAuth } from './AuthContext'
 import { LoginPage } from './AuthPages'
 
@@ -42,6 +43,7 @@ import {
   QuestionMarkCircleIcon,
   StarIcon,
   MicrophoneIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline'
 
 // Heroicons - Solid (for stat card accent icons)
@@ -165,6 +167,7 @@ const menuItems = [
   },
   { icon: <RectangleStackIcon className="icon" />, label: 'Bộ thẻ', key: 'decks' },
   { icon: <BookOpenIcon className="icon" />, label: 'Từ vựng', key: 'vocabulary' },
+  { icon: <UserGroupIcon className="icon" />, label: 'Quản lý người dùng', key: 'users' },
 ]
 
 // ===== MAIN APP =====
@@ -195,10 +198,14 @@ function AppContent() {
     return saved === 'dark'
   })
 
-  // Sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [activeMenu, setActiveMenu] = useState('statistics')
+  const [activeMenu, setActiveMenu] = useState(() => localStorage.getItem('lbl_activeMenu') || 'statistics')
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['single_practice'])
+
+  // Lưu activeMenu vào localStorage khi thay đổi
+  useEffect(() => {
+    localStorage.setItem('lbl_activeMenu', activeMenu)
+  }, [activeMenu])
 
   const toggleMenu = (key: string) => {
     setExpandedMenus(prev => 
@@ -663,9 +670,7 @@ function AppContent() {
       }
     } catch {
       // silent
-    } finally {
-      setDeleting(false)
-    }
+    } finally { setDeleting(false) }
   }
 
   const handleImport = async () => {
@@ -746,9 +751,7 @@ function AppContent() {
       }
     } catch {
       // silent
-    } finally {
-      setDeleting(false)
-    }
+    } finally { setDeleting(false) }
   }
 
   // ===== MODAL HELPERS =====
@@ -808,9 +811,6 @@ function AppContent() {
     }))
   }
 
-  // ===== FILTERING & SORTING =====
-  // Client-side filtering removed. Data is fetched via API.
-
   // ===== TABLE HANDLERS =====
   const toggleSelectAll = () => {
     if (selectedRows.length === vocabularies.length && vocabularies.length > 0) {
@@ -859,8 +859,6 @@ function AppContent() {
     return colors[level] || '#94a3b8'
   }
 
-
-
   const getSortIcon = (field: string) => {
     if (sortField !== field) return '⇕'
     return sortDir === 'asc' ? '↑' : '↓'
@@ -879,6 +877,7 @@ function AppContent() {
 
         <nav className="sidebar-nav">
           {menuItems.map(item => {
+            if (item.key === 'users' && !isAdmin) return null
             const hasChildren = item.children && item.children.length > 0;
             const isExpanded = expandedMenus.includes(item.key);
             const isChildActive = hasChildren && item.children!.some(child => child.key === activeMenu);
@@ -969,6 +968,8 @@ function AppContent() {
         <main className="content">
           {activeMenu === 'practice' ? (
             <PracticeFlow onExit={() => setActiveMenu('vocabulary')} />
+          ) : activeMenu === 'users' && user?.role === 'admin' ? (
+            <UserManagementPage darkMode={darkMode} />
           ) : activeMenu === 'vocabulary' ? (
           <>
           <div className="page-header">
@@ -1668,12 +1669,12 @@ function AppContent() {
                         )}
                       </div>
                       <div className="recent-skill-bars">
-                        <div className="mini-skill" title={`Reading: ${act.skills.reading}`}>
+                        <div className="mini-skill" title={`Reading: ${act.skills.recall}`}>
                           <span className="mini-skill-label">R</span>
                           <span className="mini-skill-track">
-                            <span className="mini-skill-fill" style={{ width: `${act.skills.reading}%`, background: '#3B82F6' }} />
+                            <span className="mini-skill-fill" style={{ width: `${act.skills.recall}%`, background: '#3B82F6' }} />
                           </span>
-                          <span className="mini-skill-val">{act.skills.reading}</span>
+                          <span className="mini-skill-val">{act.skills.recall}</span>
                         </div>
                         <div className="mini-skill" title={`Writing: ${act.skills.writing}`}>
                           <span className="mini-skill-label">W</span>
@@ -1733,7 +1734,7 @@ function AppContent() {
             </div>
           </div>
 
-          {/* Scoring Overview (moved here) */}
+          {/* Scoring Overview */}
           <div className="scoring-overview-card">
             <button
               className={`scoring-overview-toggle ${showScoringOverview ? 'open' : ''}`}
@@ -2283,9 +2284,7 @@ function AppContent() {
             </div>
           )}
           </>
-          ) : null}
-
-          {activeMenu === 'quiz' ? (
+          ) : activeMenu === 'quiz' ? (
             <QuizPage
               vocabularies={vocabularies}
               decks={decks}

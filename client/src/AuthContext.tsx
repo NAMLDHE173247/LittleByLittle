@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = useCallback(async (name: string, email: string, password: string) => {
     try {
       const res = await fetch(`${AUTH_API_URL}/register`, {
         method: 'POST',
@@ -96,17 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       const json = await res.json()
       if (json.success) {
-        const { token: newToken, user: userData } = json.data
-        localStorage.setItem('lbl_token', newToken)
-        setToken(newToken)
-        setUser(userData)
+        // Đăng ký thành công -> trả về true, không đăng nhập tự động
         return { success: true, message: json.message }
       }
       return { success: false, message: json.message || 'Đăng ký thất bại' }
     } catch {
       return { success: false, message: 'Không thể kết nối tới server' }
     }
-  }
+  }, [])
 
   const logout = () => {
     localStorage.removeItem('lbl_token')

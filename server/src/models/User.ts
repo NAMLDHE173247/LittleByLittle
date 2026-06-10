@@ -6,6 +6,7 @@ export interface IUser extends Document {
   password: string;
   name: string;
   role: "admin" | "user";
+  status: "pending" | "active" | "rejected";
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -38,6 +39,11 @@ const UserSchema = new Schema<IUser>(
       type: String,
       enum: ["admin", "user"],
       default: "user",
+    },
+    status: {
+      type: String,
+      enum: ["pending", "active", "rejected"],
+      default: "pending",
     },
   },
   {

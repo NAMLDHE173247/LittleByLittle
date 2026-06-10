@@ -318,6 +318,7 @@ body {
   cursor: pointer;
   transition: all 0.25s ease;
   flex-shrink: 0;
+  align-self: flex-end;
 }
 
 .sidebar-footer .sidebar-toggle:hover {
@@ -5539,6 +5540,7 @@ body {
 }
 .sidebar.collapsed .sidebar-toggle {
   margin: 0 auto;
+  align-self: center;
 }
 
 /* ===================================================

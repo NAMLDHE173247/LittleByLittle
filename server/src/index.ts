@@ -6,6 +6,7 @@ import vocabularyRoutes from "./routes/vocabulary";
 import deckRoutes from "./routes/deck";
 import progressRoutes from "./routes/progress";
 import authRoutes from "./routes/auth";
+import usersRoutes from "./routes/users";
 
 // Load environment variables
 dotenv.config();
@@ -23,6 +24,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/users", usersRoutes);
 app.use("/api/vocabulary", vocabularyRoutes);
 app.use("/api/decks", deckRoutes);
 app.use("/api/progress", progressRoutes);
