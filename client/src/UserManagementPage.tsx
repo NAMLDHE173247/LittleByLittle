@@ -8,9 +8,12 @@ import {
   ClockIcon,
   ShieldCheckIcon,
   NoSymbolIcon,
+  UserPlusIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 
-const API_URL = 'http://localhost:5000/api/users'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = `${BASE_URL}/api/users`
 
 interface User {
   _id: string
@@ -26,6 +29,11 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addForm, setAddForm] = useState({ name: '', email: '', password: '123456', role: 'user', status: 'active' })
+  const [addError, setAddError] = useState('')
+  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -101,6 +109,35 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
     }
   }
 
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim()) {
+      setAddError('Vui lòng điền đầy đủ thông tin bắt buộc')
+      return
+    }
+    setAddError('')
+    setAdding(true)
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(addForm)
+      })
+      const json = await res.json()
+      if (json.success) {
+        setShowAddModal(false)
+        setAddForm({ name: '', email: '', password: '123456', role: 'user', status: 'active' })
+        fetchUsers()
+      } else {
+        setAddError(json.message)
+      }
+    } catch (err) {
+      setAddError('Lỗi kết nối khi thêm người dùng')
+    } finally {
+      setAdding(false)
+    }
+  }
+
   if (currentUser?.role !== 'admin') {
     return (
       <div className="content">
@@ -133,6 +170,11 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
         <div>
           <h1 className="page-title">Quản lý người dùng</h1>
           <p className="page-subtitle">Quản lý tài khoản, duyệt đăng ký mới và phân quyền.</p>
+        </div>
+        <div className="header-actions">
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+            <UserPlusIcon className="icon icon-inline" /> Thêm tài khoản
+          </button>
         </div>
       </div>
 
@@ -255,6 +297,61 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
           )}
         </div>
       </div>
+
+      {/* Add User Modal */}
+      {showAddModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Thêm tài khoản mới</h2>
+              <button className="modal-close" onClick={() => setShowAddModal(false)}>
+                <XMarkIcon className="icon" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {addError && <div className="auth-error" style={{ marginBottom: 16 }}>{addError}</div>}
+              <form onSubmit={handleAddUser} className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
+                <div className="form-group">
+                  <label>Tên hiển thị <span className="required">*</span></label>
+                  <input type="text" value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Nhập tên" autoFocus />
+                </div>
+                <div className="form-group">
+                  <label>Email <span className="required">*</span></label>
+                  <input type="email" value={addForm.email} onChange={e => setAddForm({ ...addForm, email: e.target.value })} placeholder="email@example.com" />
+                </div>
+                <div className="form-group">
+                  <label>Mật khẩu <span className="required">*</span></label>
+                  <input type="text" value={addForm.password} onChange={e => setAddForm({ ...addForm, password: e.target.value })} placeholder="Mật khẩu" />
+                  <small style={{ color: 'var(--text-secondary)' }}>Mặc định là 123456, bạn có thể nhập mật khẩu khác nếu muốn.</small>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div className="form-group">
+                    <label>Vai trò</label>
+                    <select value={addForm.role} onChange={e => setAddForm({ ...addForm, role: e.target.value })}>
+                      <option value="user">Người dùng (USER)</option>
+                      <option value="admin">Quản trị viên (ADMIN)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Trạng thái</label>
+                    <select value={addForm.status} onChange={e => setAddForm({ ...addForm, status: e.target.value })}>
+                      <option value="active">Đã duyệt (Active)</option>
+                      <option value="pending">Chờ duyệt (Pending)</option>
+                      <option value="rejected">Bị khoá (Rejected)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="modal-footer" style={{ marginTop: 24, padding: 0 }}>
+                  <button type="button" className="btn-outline" onClick={() => setShowAddModal(false)}>Hủy</button>
+                  <button type="submit" className="btn-primary" disabled={adding}>
+                    {adding ? 'Đang thêm...' : 'Thêm tài khoản'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

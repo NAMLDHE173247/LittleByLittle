@@ -4,6 +4,7 @@ import QuizPage from './QuizPage'
 import UserManagementPage from './UserManagementPage'
 import { AuthProvider, useAuth } from './AuthContext'
 import { LoginPage } from './AuthPages'
+import { LandingPage } from './LandingPage'
 
 import {
   AcademicCapIcon,
@@ -54,9 +55,10 @@ import {
 import PracticeFlow from './PracticeFlow'
 import { ArrowRightStartOnRectangleIcon } from '@heroicons/react/24/outline'
 
-const API_URL = 'http://localhost:5000/api/vocabulary'
-const DECK_API_URL = 'http://localhost:5000/api/decks'
-const PROGRESS_API_URL = 'http://localhost:5000/api/progress'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = `${BASE_URL}/api/vocabulary`
+const DECK_API_URL = `${BASE_URL}/api/decks`
+const PROGRESS_API_URL = `${BASE_URL}/api/progress`
 
 interface DeckRef {
   _id: string
@@ -170,12 +172,12 @@ const menuItems = [
   { icon: <UserGroupIcon className="icon" />, label: 'Quản lý người dùng', key: 'users' },
 ]
 
-// ===== MAIN APP =====
-function AppContent() {
-  const { user, logout, isAdmin, authHeaders, loading: authLoading } = useAuth()
+// ===== AUTH WRAPPER =====
+function AppWrapper() {
+  const { user, loading: authLoading } = useAuth()
   const darkModeInit = localStorage.getItem('theme') === 'dark'
+  const [showAuth, setShowAuth] = useState(false)
 
-  // Show login page if not authenticated
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: darkModeInit ? '#0f172a' : '#f1f5f9' }}>
@@ -188,8 +190,18 @@ function AppContent() {
   }
 
   if (!user) {
+    if (!showAuth) {
+      return <LandingPage darkMode={darkModeInit} onLoginClick={() => setShowAuth(true)} />
+    }
     return <LoginPage darkMode={darkModeInit} />
   }
+
+  return <AppContent />
+}
+
+// ===== MAIN APP =====
+function AppContent() {
+  const { user, logout, isAdmin, authHeaders } = useAuth()
   const [vocabularies, setVocabularies] = useState<VocabularyItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2905,7 +2917,7 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <AppWrapper />
     </AuthProvider>
   )
 }

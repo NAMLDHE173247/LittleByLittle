@@ -13,7 +13,8 @@ import {
 } from '@heroicons/react/24/outline'
 import { useAuth } from './AuthContext'
 
-const PROGRESS_API_URL = 'http://localhost:5000/api/progress'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const PROGRESS_API_URL = `${BASE_URL}/api/progress`
 
 interface PracticeFlowProps {
   onExit: () => void;
@@ -491,7 +492,7 @@ export default function PracticeFlow({ onExit }: PracticeFlowProps) {
                     </label>
                     <label className="setup-checkbox">
                       <input type="checkbox" checked={selectedSteps[6]} onChange={() => toggleStep(6 as any)} />
-                      <span><strong>Step 6:</strong> Luyện phát âm (Azure AI)</span>
+                      <span><strong>Step 6:</strong> Luyện phát âm (Azure AI) <em style={{ fontSize: '0.85em', color: '#f59e0b', fontWeight: 'normal' }}>(Đang phát triển)</em></span>
                     </label>
                   </div>
                 </div>

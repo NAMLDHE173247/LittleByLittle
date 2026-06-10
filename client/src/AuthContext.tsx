@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
-const AUTH_API_URL = 'http://localhost:5000/api/auth'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const AUTH_API_URL = `${BASE_URL}/api/auth`
 
 interface User {
   id: string
