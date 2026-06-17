@@ -1,6 +1,7 @@
 "use client";
 import React from 'react';
 import { useGlobalData } from '@/components/providers/GlobalDataProvider';
+import { useAuth } from '@/AuthContext';
 import VocabularyPage from '@/components/features/Vocabulary/VocabularyPage';
 
 export default function VocabularyRoute() {
@@ -16,6 +17,7 @@ export default function VocabularyRoute() {
     setShowImportModal, setImportResult, setImportError, setImportJsonText,
     setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor
   } = useGlobalData();
+  const { authHeaders } = useAuth();
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -52,7 +54,7 @@ export default function VocabularyRoute() {
       pagination={{ currentPage, setCurrentPage, totalPagesState }}
       sorting={{ sortField, sortDir, handleSort, getSortIcon }}
       selection={{ selectedRows, isSelectionMode, setIsSelectionMode, toggleSelectAll, toggleSelectRow, setSelectedRows }}
-      actions={{ openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor }}
+      actions={{ openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders }}
     />
   );
 }

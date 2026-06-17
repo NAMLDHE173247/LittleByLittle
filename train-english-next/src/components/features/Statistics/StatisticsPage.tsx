@@ -19,7 +19,7 @@ interface StatisticsPageProps {
   getLevelColor: (level: string) => string
 }
 
-import Heatmap from './Heatmap'
+
 
 export default function StatisticsPage({
   progressData,
@@ -51,7 +51,10 @@ export default function StatisticsPage({
         </div>
       ) : progressData ? (
         <>
-        <Heatmap />
+        <div className="card" style={{ padding: '24px', marginBottom: '24px', textAlign: 'center' }}>
+          <h3 style={{ marginBottom: '8px', fontWeight: 600, fontSize: '18px' }}>Mức độ chăm chỉ (30 ngày qua)</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>🚧 Đang phát triển</p>
+        </div>
         {/* Decay Alert Banner */}
         {progressData.decay && progressData.decay.decayedCount > 0 && (
           <div className="decay-alert-banner">

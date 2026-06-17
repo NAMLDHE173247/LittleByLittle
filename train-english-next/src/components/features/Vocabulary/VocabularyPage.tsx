@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
-  ArrowDownTrayIcon, PlusIcon, DocumentTextIcon, ChatBubbleLeftRightIcon,
+  ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, DocumentTextIcon, ChatBubbleLeftRightIcon,
   TagIcon, MagnifyingGlassIcon, TrashIcon, XMarkIcon, ExclamationTriangleIcon,
   CheckIcon, SpeakerWaveIcon, PhotoIcon, PencilSquareIcon, EyeIcon
 } from '@heroicons/react/24/outline'
@@ -38,6 +38,7 @@ export interface VocabularyPageProps {
     openAddModal: any; openEditModal: any; setDetailVocab: any; setDeleteTarget: any;
     setShowImportModal: any; setImportResult: any; setImportError: any; setImportJsonText: any;
     setQuickDeckVocab: any; setQuickDeckIds: any; speak: any; getLevelColor: any;
+    authHeaders: () => Record<string, string>;
   };
 }
 
@@ -49,7 +50,95 @@ export default function VocabularyPage({
   const { currentPage, setCurrentPage, totalPagesState } = pagination;
   const { sortField, handleSort, getSortIcon } = sorting;
   const { selectedRows, isSelectionMode, setIsSelectionMode, toggleSelectAll, toggleSelectRow, setSelectedRows } = selection;
-  const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor } = actions;
+  const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders } = actions;
+
+  const [exporting, setExporting] = useState(false);
+
+  const exportToTxt = async () => {
+    setExporting(true);
+    try {
+      // Fetch all vocabulary without pagination
+      const res = await fetch(`/api/vocabulary?limit=10000`, { headers: authHeaders() });
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        alert('Không thể tải dữ liệu từ vựng!');
+        return;
+      }
+
+      const allVocabs: any[] = json.data;
+      const now = new Date().toLocaleString('vi-VN');
+      const separator = '═'.repeat(60);
+      const thinSep = '─'.repeat(60);
+
+      let txt = '';
+      txt += `${separator}\n`;
+      txt += `  📚 DANH SÁCH TỪ VỰNG - LittleByLittle\n`;
+      txt += `  Xuất lúc: ${now}\n`;
+      txt += `  Tổng: ${allVocabs.length} từ\n`;
+      txt += `${separator}\n\n`;
+
+      allVocabs.forEach((v: any, idx: number) => {
+        txt += `${thinSep}\n`;
+        txt += `  ${idx + 1}. ${v.word}`;
+        if (v.pronunciation) txt += `  /${v.pronunciation}/`;
+        txt += `\n`;
+        txt += `${thinSep}\n`;
+
+        if (v.meanings?.length > 0) {
+          txt += `  Nghĩa:        ${v.meanings.join(', ')}\n`;
+        }
+        if (v.partOfSpeech) {
+          txt += `  Từ loại:      ${v.partOfSpeech}\n`;
+        }
+        if (v.level) {
+          txt += `  Cấp độ:       ${v.level}\n`;
+        }
+        if (v.type) {
+          txt += `  Loại:         ${v.type === 'word' ? 'Từ đơn' : 'Cụm từ'}\n`;
+        }
+        if (v.topic) {
+          txt += `  Chủ đề:       ${v.topic}\n`;
+        }
+        if (v.synonyms?.length > 0) {
+          txt += `  Đồng nghĩa:  ${v.synonyms.join(', ')}\n`;
+        }
+        if (v.antonyms?.length > 0) {
+          txt += `  Trái nghĩa:  ${v.antonyms.join(', ')}\n`;
+        }
+        if (v.examples?.length > 0) {
+          txt += `  Ví dụ:\n`;
+          v.examples.forEach((ex: any, i: number) => {
+            txt += `    ${i + 1}) ${ex.en}\n`;
+            if (ex.vi) txt += `       → ${ex.vi}\n`;
+          });
+        }
+        if (v.note) {
+          txt += `  Ghi chú:      ${v.note}\n`;
+        }
+        txt += `\n`;
+      });
+
+      txt += `${separator}\n`;
+      txt += `  Hết danh sách (${allVocabs.length} từ)\n`;
+      txt += `${separator}\n`;
+
+      // Download file
+      const blob = new Blob(['\uFEFF' + txt], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tu-vung-littlebylittle-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Lỗi khi xuất dữ liệu!');
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <>
@@ -59,6 +148,9 @@ export default function VocabularyPage({
           <p className="page-subtitle">Quản lý bộ sưu tập từ vựng của bạn</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-outline" onClick={exportToTxt} disabled={exporting}>
+            <ArrowUpTrayIcon className="icon icon-inline" /> {exporting ? 'Đang xuất...' : 'Export TXT'}
+          </button>
           <button className="btn-import" onClick={() => { setShowImportModal(true); setImportResult(null); setImportError(''); setImportJsonText('') }}>
             <ArrowDownTrayIcon className="icon icon-inline" /> Import từ vựng
           </button>

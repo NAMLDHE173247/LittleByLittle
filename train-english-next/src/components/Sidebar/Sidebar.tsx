@@ -18,7 +18,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: <ChartBarIcon className="sb-icon" />, label: 'Thống kê', key: 'statistics' },
-  { icon: <AcademicCapIcon className="sb-icon" />, label: 'Cây thông thạo', key: 'practice' },
+  { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🐝</span>, label: 'Cày thông thạo', key: 'practice' },
   { icon: <TrophyIcon className="sb-icon" />, label: 'Độ thông thạo', key: 'mastery' },
   {
     icon: <LightBulbIcon className="sb-icon" />,

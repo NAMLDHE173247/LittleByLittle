@@ -538,6 +538,18 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
                   <label className="setup-label">Số lượng từ vựng</label>
                   <div className="setup-options">
                     <button 
+                      className={`setup-option-btn ${wordCount === 4 && !customWordCount ? 'active' : ''}`}
+                      onClick={() => { setWordCount(4); setCustomWordCount('') }}
+                    >
+                      4 từ
+                    </button>
+                    <button 
+                      className={`setup-option-btn ${wordCount === 5 && !customWordCount ? 'active' : ''}`}
+                      onClick={() => { setWordCount(5); setCustomWordCount('') }}
+                    >
+                      5 từ
+                    </button>
+                    <button 
                       className={`setup-option-btn ${wordCount === 8 && !customWordCount ? 'active' : ''}`}
                       onClick={() => { setWordCount(8); setCustomWordCount('') }}
                     >
