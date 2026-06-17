@@ -59,7 +59,7 @@ async function applyDecayBatch(userId: string) {
 // ================================================================
 // GET /api/progress/stats — Thống kê tổng quan (có apply decay)
 // ================================================================
-export const handle_GET_stats = async (req: any, res: any, userId: string) => { 
+export const getStats = async (userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
@@ -169,7 +169,7 @@ export const handle_GET_stats = async (req: any, res: any, userId: string) => {
       };
     });
 
-    res.json({
+    return {
       success: true,
       data: {
         totalWords,
@@ -183,33 +183,29 @@ export const handle_GET_stats = async (req: any, res: any, userId: string) => {
           appliedAt: now.toISOString(),
         },
         streak: await User.findById(userId).then(u => u?.streak || 0)
-      },
-    });
+      },};
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // GET /api/progress/due — Lấy danh sách từ cần ôn tập
 // ================================================================
-export const handle_GET_due = async (req: any, res: any, userId: string) => { 
+export const getDue = async (payload: { skill?: string; limit?: number }, userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
-    const skill = (req.query.skill as string) || "recall";
-    const limit = parseInt(req.query.limit as string) || 10;
+    const skill = (payload.skill as string) || "recall";
+    const limit = parseInt(payload.limit as string) || 10;
     const now = new Date();
 
     const validSkills = ["recall", "listening", "writing", "pronunciation"];
     if (!validSkills.includes(skill)) {
-      res.status(400).json({
+      throw new Error(JSON.stringify({
         success: false,
         message: `Invalid skill. Must be one of: ${validSkills.join(", ")}`,
-      });
-      return;
+      }));
     }
 
     // Find overdue words, sorted by most overdue first
@@ -237,7 +233,7 @@ export const handle_GET_due = async (req: any, res: any, userId: string) => {
       .limit(Math.max(0, limit - dueWords.length))
       .select("word pronunciation meanings level type partOfSpeech topic");
 
-    res.json({
+    return {
       success: true,
       data: {
         dueWords: dueWords.map((p) => ({
@@ -265,26 +261,23 @@ export const handle_GET_due = async (req: any, res: any, userId: string) => {
         skill,
         totalDue: dueWords.length,
         totalNew: newWords.length,
-      },
-    });
+      },};
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // GET /api/progress/practice-words — Lấy danh sách từ vựng luyện tập (hỗ trợ filter)
 // ================================================================
-export const handle_GET_practice_words = async (req: any, res: any, userId: string) => { 
+export const getPracticeWords = async (payload: { count?: number; mode?: string; tier?: string; deckId?: string }, userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
-    const count = parseInt(req.query.count as string) || 8;
-    const mode = (req.query.mode as string) || "lowest_score";
-    const tierFilter = (req.query.tier as string) || "all";
-    const deckId = req.query.deckId as string;
+    const count = parseInt(payload.count as string) || 8;
+    const mode = (payload.mode as string) || "lowest_score";
+    const tierFilter = (payload.tier as string) || "all";
+    const deckId = payload.deckId as string;
 
     await applyDecayBatch(userId);
 
@@ -372,39 +365,36 @@ export const handle_GET_practice_words = async (req: any, res: any, userId: stri
       isDecaying: w.isDecaying
     }));
 
-    res.json({
+    return {
       success: true,
-      data: selected
-    });
+      data: selected};
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // POST /api/progress/review — Ôn tập 1 từ (cập nhật điểm)
 // ================================================================
-export const handle_POST_review = async (req: any, res: any, userId: string) => { 
+export const reviewWord = async (payload: { wordId: string; skill: string; correct: boolean }, userId: string) => { 
   await dbConnect();
   try {
-    const { wordId, skill, correct } = req.body;
+    const { wordId, skill, correct } = payload;
 
     // Validate
     if (!wordId || !skill || typeof correct !== "boolean") {
-      res.status(400).json({
+      throw new Error(JSON.stringify({
         success: false,
         message: "Required: wordId (string), skill (string), correct (boolean)",
-      });
-      return;
+      }));
     }
 
     const validSkills = ["recall", "listening", "writing", "pronunciation"];
     if (!validSkills.includes(skill)) {
-      res.status(400).json({
+      throw new Error(JSON.stringify({
         success: false,
         message: `Invalid skill. Must be one of: ${validSkills.join(", ")}`,
-      });
-      return;
+      }));
     }
 
     const userObjId = new mongoose.Types.ObjectId(userId);
@@ -488,7 +478,7 @@ export const handle_POST_review = async (req: any, res: any, userId: string) => 
       return "not_started";
     };
 
-    res.json({
+    return {
       success: true,
       data: {
         wordId,
@@ -500,40 +490,34 @@ export const handle_POST_review = async (req: any, res: any, userId: string) => 
         previousTier: getTier(currentPoints),
         newTier: getTier(newPoints),
         nextReview: nextReview.toISOString(),
-      },
-    });
+      },};
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // POST /api/progress/apply-decay — Chạy decay thủ công (admin/debug)
 // ================================================================
-export const handle_POST_apply_decay = async (req: any, res: any, userId: string) => { 
+export const applyDecay = async (userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
     const result = await applyDecayBatch(userId);
 
-    res.json({
+    return {
       success: true,
       message: `Decay applied: ${result.decayedCount} words affected, ${result.totalDecayedPoints} total points lost`,
-      data: result,
-    });
+      data: result,};
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // POST /api/progress/seed-demo — Tạo dữ liệu demo cho skill proficiency
 // ================================================================
-export const handle_POST_seed_demo = async (req: any, res: any, userId: string) => { 
+export const seedDemo = async (userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
@@ -613,22 +597,19 @@ export const handle_POST_seed_demo = async (req: any, res: any, userId: string) 
       created++;
     }
 
-    res.json({
+    return {
       success: true,
       message: `Seeded ${created} progress records (${skipped} already existed)`,
-      data: { created, skipped },
-    });
+      data: { created, skipped },};
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // GET /api/progress/words — Danh sách từ vựng kèm điểm + filter
 // ================================================================
-export const handle_GET_words = async (req: any, res: any, userId: string) => { 
+export const getWords = async (payload: { tier?: string; search?: string; sort?: string; page?: string; limit?: string; skill?: string }, userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
@@ -639,7 +620,7 @@ export const handle_GET_words = async (req: any, res: any, userId: string) => {
       page = "1",
       limit = "20",
       skill = "all",
-    } = req.query as Record<string, string>;
+    } = payload as Record<string, string>;
 
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -744,45 +725,40 @@ export const handle_GET_words = async (req: any, res: any, userId: string) => {
       total: totalItems,
     };
 
-    res.json({
+    return {
       success: true,
       data: {
         words: paginatedWords,
         pagination: { page: pageNum, totalPages, totalItems, limit: limitNum },
         tierSummary,
-      },
-    });
+      },};
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // PATCH /api/progress/adjust — Tăng/giảm điểm thủ công
 // ================================================================
-export const handle_PATCH_adjust = async (req: any, res: any, userId: string) => { 
+export const adjustProgress = async (payload: { wordId: string; skill: string; amount: number }, userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
-    const { wordId, skill, amount } = req.body;
+    const { wordId, skill, amount } = payload;
 
     if (!wordId || !skill || typeof amount !== "number") {
-      res.status(400).json({
+      throw new Error(JSON.stringify({
         success: false,
         message: "Required: wordId (string), skill (string), amount (number, can be negative)",
-      });
-      return;
+      }));
     }
 
     const validSkills = ["recall", "listening", "writing", "pronunciation"];
     if (!validSkills.includes(skill)) {
-      res.status(400).json({
+      throw new Error(JSON.stringify({
         success: false,
         message: `Invalid skill. Must be one of: ${validSkills.join(", ")}`,
-      });
-      return;
+      }));
     }
 
     const userObjId = new mongoose.Types.ObjectId(userId);
@@ -817,7 +793,7 @@ export const handle_PATCH_adjust = async (req: any, res: any, userId: string) =>
       }
     );
 
-    res.json({
+    return {
       success: true,
       data: {
         wordId,
@@ -826,49 +802,46 @@ export const handle_PATCH_adjust = async (req: any, res: any, userId: string) =>
         newPoints,
         change: newPoints - currentPoints,
         nextReview: nextReview.toISOString(),
-      },
-    });
+      },};
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
 // ================================================================
 // DELETE /api/progress/clear — Xóa tiến độ (toàn bộ hoặc 1 từ)
 // ================================================================
-export const handle_DELETE_clear = async (req: any, res: any, userId: string) => { 
+export const clearProgress = async (userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
     const result = await UserWordProgress.deleteMany({
       userId,
     });
-    res.json({
+    return {
       success: true,
       message: `Cleared all progress: ${result.deletedCount} records deleted`,
-      data: { deletedCount: result.deletedCount },
-    });
+      data: { deletedCount: result.deletedCount },};
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 
-export const handle_DELETE_clear_by_wordId = async (req: any, res: any, userId: string) => { 
+export const clearProgressByWordId = async (payload: { wordId: string }, userId: string) => { 
   await dbConnect();
   try {
     // const userId = userId;
-    const { wordId } = req.params;
+    const { wordId } = payload;
     const result = await UserWordProgress.deleteOne({
       userId,
       wordId: new mongoose.Types.ObjectId(wordId),
     });
-    res.json({
+    return {
       success: true,
       message: result.deletedCount > 0 ? "Progress cleared" : "No progress found",
-      data: { deletedCount: result.deletedCount },
-    });
+      data: { deletedCount: result.deletedCount },};
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error });
+    throw error;
   }
 };
 

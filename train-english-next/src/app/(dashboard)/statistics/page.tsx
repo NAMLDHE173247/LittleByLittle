@@ -2,9 +2,11 @@
 import React from 'react';
 import { useGlobalData } from '@/components/providers/GlobalDataProvider';
 import StatisticsPage from '@/components/features/Statistics/StatisticsPage';
+import { useProgress } from '@/hooks/useProgress';
 
 export default function StatisticsRoute() {
-  const { progressData, progressLoading, seedingDemo, setSeedingDemo, getLevelColor } = useGlobalData();
+  const { seedingDemo, setSeedingDemo, getLevelColor } = useGlobalData();
+  const { progressData, isLoading: progressLoading } = useProgress();
 
   const seedDemoData = async () => {};
 
