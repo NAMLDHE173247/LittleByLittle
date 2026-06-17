@@ -1,0 +1,362 @@
+[
+  {
+    "word": "accomplish",
+    "type": "word",
+    "pronunciation": "/əˈkʌmplɪʃ/",
+    "meanings": ["hoàn thành", "đạt được"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "We have accomplished a lot today.",
+        "vi": "Chúng ta đã hoàn thành được rất nhiều việc hôm nay."
+      }
+    ],
+    "topic": "Work and Success",
+    "level": "B2",
+    "synonyms": ["achieve", "attain", "complete"],
+    "antonyms": ["fail", "give up"],
+    "note": "Thường dùng với các danh từ như goal, task, objective."
+  },
+  {
+    "word": "adapt",
+    "type": "word",
+    "pronunciation": "/əˈdæpt/",
+    "meanings": ["thích nghi", "thích ứng"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "It took him a while to adapt to the new environment.",
+        "vi": "Anh ấy mất một thời gian để thích nghi với môi trường mới."
+      }
+    ],
+    "topic": "Life and Changes",
+    "level": "B2",
+    "synonyms": ["adjust", "accommodate"],
+    "antonyms": ["refuse", "reject"],
+    "note": "Đi với giới từ 'to' (adapt to something)."
+  },
+  {
+    "word": "adequate",
+    "type": "word",
+    "pronunciation": "/ˈædɪkwət/",
+    "meanings": ["đầy đủ", "tương xứng"],
+    "partOfSpeech": "adjective",
+    "examples": [
+      {
+        "en": "Make sure you have an adequate amount of water.",
+        "vi": "Đảm bảo bạn có đủ lượng nước."
+      }
+    ],
+    "topic": "General",
+    "level": "B2",
+    "synonyms": ["sufficient", "enough"],
+    "antonyms": ["inadequate", "insufficient"],
+    "note": ""
+  },
+  {
+    "word": "clarify",
+    "type": "word",
+    "pronunciation": "/ˈklærəfaɪ/",
+    "meanings": ["làm rõ", "giải thích"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "Could you clarify the first point you made?",
+        "vi": "Bạn có thể làm rõ điểm đầu tiên bạn vừa nói không?"
+      }
+    ],
+    "topic": "Communication",
+    "level": "B2",
+    "synonyms": ["explain", "elucidate"],
+    "antonyms": ["confuse", "obscure"],
+    "note": ""
+  },
+  {
+    "word": "crucial",
+    "type": "word",
+    "pronunciation": "/ˈkruːʃl/",
+    "meanings": ["quan trọng", "cốt yếu"],
+    "partOfSpeech": "adjective",
+    "examples": [
+      {
+        "en": "Water is crucial for survival.",
+        "vi": "Nước là yếu tố cốt yếu để sinh tồn."
+      }
+    ],
+    "topic": "Importance",
+    "level": "B2",
+    "synonyms": ["essential", "vital", "critical"],
+    "antonyms": ["unimportant", "trivial"],
+    "note": ""
+  },
+  {
+    "word": "demonstrate",
+    "type": "word",
+    "pronunciation": "/ˈdemənstreɪt/",
+    "meanings": ["chứng minh", "giải thích qua ví dụ"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "The study demonstrates that regular exercise improves mental health.",
+        "vi": "Nghiên cứu chứng minh rằng tập thể dục thường xuyên cải thiện sức khỏe tinh thần."
+      }
+    ],
+    "topic": "Academic",
+    "level": "B2",
+    "synonyms": ["show", "prove", "illustrate"],
+    "antonyms": ["hide", "conceal"],
+    "note": ""
+  },
+  {
+    "word": "encounter",
+    "type": "word",
+    "pronunciation": "/ɪnˈkaʊntər/",
+    "meanings": ["chạm trán", "gặp phải"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "We encountered a few problems during the project.",
+        "vi": "Chúng tôi gặp phải một vài vấn đề trong suốt dự án."
+      }
+    ],
+    "topic": "Experience",
+    "level": "B2",
+    "synonyms": ["meet", "face", "experience"],
+    "antonyms": ["avoid", "dodge"],
+    "note": "Thường dùng để chỉ việc gặp gỡ ngẫu nhiên hoặc đối mặt với khó khăn."
+  },
+  {
+    "word": "evaluate",
+    "type": "word",
+    "pronunciation": "/ɪˈvæljueɪt/",
+    "meanings": ["đánh giá"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "The teacher will evaluate the students' performance at the end of the term.",
+        "vi": "Giáo viên sẽ đánh giá kết quả học tập của học sinh vào cuối học kỳ."
+      }
+    ],
+    "topic": "Academic",
+    "level": "B2",
+    "synonyms": ["assess", "appraise"],
+    "antonyms": ["ignore", "neglect"],
+    "note": ""
+  },
+  {
+    "word": "fascinating",
+    "type": "word",
+    "pronunciation": "/ˈfæsɪneɪtɪŋ/",
+    "meanings": ["hấp dẫn", "thú vị"],
+    "partOfSpeech": "adjective",
+    "examples": [
+      {
+        "en": "I find this book absolutely fascinating.",
+        "vi": "Tôi thấy cuốn sách này cực kỳ thú vị."
+      }
+    ],
+    "topic": "Feelings and Opinions",
+    "level": "B2",
+    "synonyms": ["captivating", "interesting"],
+    "antonyms": ["boring", "dull"],
+    "note": ""
+  },
+  {
+    "word": "generate",
+    "type": "word",
+    "pronunciation": "/ˈdʒenəreɪt/",
+    "meanings": ["tạo ra", "phát sinh"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "Wind turbines are used to generate electricity.",
+        "vi": "Tua-bin gió được sử dụng để tạo ra điện."
+      }
+    ],
+    "topic": "Science and Technology",
+    "level": "B2",
+    "synonyms": ["produce", "create"],
+    "antonyms": ["destroy", "terminate"],
+    "note": ""
+  },
+  {
+    "word": "hesitate",
+    "type": "word",
+    "pronunciation": "/ˈhezɪteɪt/",
+    "meanings": ["do dự", "ngập ngừng"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "If you have any questions, don't hesitate to ask.",
+        "vi": "Nếu bạn có bất kỳ câu hỏi nào, đừng ngần ngại hỏi."
+      }
+    ],
+    "topic": "Behavior",
+    "level": "B2",
+    "synonyms": ["pause", "delay"],
+    "antonyms": ["decide", "rush"],
+    "note": ""
+  },
+  {
+    "word": "implement",
+    "type": "word",
+    "pronunciation": "/ˈɪmplɪment/",
+    "meanings": ["thực thi", "áp dụng"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "The government is planning to implement new policies.",
+        "vi": "Chính phủ đang lên kế hoạch thực thi các chính sách mới."
+      }
+    ],
+    "topic": "Business and Politics",
+    "level": "B2",
+    "synonyms": ["execute", "apply"],
+    "antonyms": ["cancel", "stop"],
+    "note": ""
+  },
+  {
+    "word": "justify",
+    "type": "word",
+    "pronunciation": "/ˈdʒʌstɪfaɪ/",
+    "meanings": ["biện minh", "bào chữa"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "He tried to justify his bad behavior.",
+        "vi": "Anh ta cố gắng biện minh cho hành vi tồi tệ của mình."
+      }
+    ],
+    "topic": "Communication",
+    "level": "B2",
+    "synonyms": ["defend", "explain"],
+    "antonyms": ["condemn", "blame"],
+    "note": ""
+  },
+  {
+    "word": "maintain",
+    "type": "word",
+    "pronunciation": "/meɪnˈteɪn/",
+    "meanings": ["duy trì", "bảo trì"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "It is important to maintain a healthy lifestyle.",
+        "vi": "Việc duy trì một lối sống lành mạnh là rất quan trọng."
+      }
+    ],
+    "topic": "Health and Lifestyle",
+    "level": "B2",
+    "synonyms": ["preserve", "keep up"],
+    "antonyms": ["abandon", "neglect"],
+    "note": ""
+  },
+  {
+    "word": "objective",
+    "type": "word",
+    "pronunciation": "/əbˈdʒektɪv/",
+    "meanings": ["mục tiêu", "khách quan"],
+    "partOfSpeech": "noun",
+    "examples": [
+      {
+        "en": "Our main objective is to increase sales.",
+        "vi": "Mục tiêu chính của chúng tôi là tăng doanh số."
+      }
+    ],
+    "topic": "Business",
+    "level": "B2",
+    "synonyms": ["goal", "aim", "purpose"],
+    "antonyms": [],
+    "note": "Ngoài danh từ, 'objective' còn là tính từ mang nghĩa khách quan."
+  },
+  {
+    "word": "perceive",
+    "type": "word",
+    "pronunciation": "/pərˈsiːv/",
+    "meanings": ["nhận thức", "cảm nhận"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "He perceived a slight change in her tone.",
+        "vi": "Anh ấy nhận thấy một sự thay đổi nhỏ trong giọng điệu của cô ấy."
+      }
+    ],
+    "topic": "Mind and Thoughts",
+    "level": "B2",
+    "synonyms": ["notice", "recognize"],
+    "antonyms": ["ignore", "miss"],
+    "note": ""
+  },
+  {
+    "word": "reluctant",
+    "type": "word",
+    "pronunciation": "/rɪˈlʌktənt/",
+    "meanings": ["miễn cưỡng", "không sẵn lòng"],
+    "partOfSpeech": "adjective",
+    "examples": [
+      {
+        "en": "She was reluctant to leave the party.",
+        "vi": "Cô ấy miễn cưỡng rời khỏi bữa tiệc."
+      }
+    ],
+    "topic": "Feelings",
+    "level": "B2",
+    "synonyms": ["unwilling", "hesitant"],
+    "antonyms": ["eager", "willing"],
+    "note": "Đi với cấu trúc 'reluctant to do something'."
+  },
+  {
+    "word": "significant",
+    "type": "word",
+    "pronunciation": "/sɪɡˈnɪfɪkənt/",
+    "meanings": ["đáng kể", "quan trọng"],
+    "partOfSpeech": "adjective",
+    "examples": [
+      {
+        "en": "There has been a significant increase in profits.",
+        "vi": "Đã có một sự gia tăng đáng kể trong lợi nhuận."
+      }
+    ],
+    "topic": "General",
+    "level": "B2",
+    "synonyms": ["important", "notable"],
+    "antonyms": ["insignificant", "minor"],
+    "note": ""
+  },
+  {
+    "word": "tolerate",
+    "type": "word",
+    "pronunciation": "/ˈtɒləreɪt/",
+    "meanings": ["chịu đựng", "tha thứ"],
+    "partOfSpeech": "verb",
+    "examples": [
+      {
+        "en": "I will not tolerate bad behavior in my classroom.",
+        "vi": "Tôi sẽ không tha thứ cho những hành vi xấu trong lớp học của mình."
+      }
+    ],
+    "topic": "Behavior",
+    "level": "B2",
+    "synonyms": ["endure", "bear"],
+    "antonyms": ["reject", "prohibit"],
+    "note": ""
+  },
+  {
+    "word": "widespread",
+    "type": "word",
+    "pronunciation": "/ˈwaɪdspred/",
+    "meanings": ["lan rộng", "phổ biến"],
+    "partOfSpeech": "adjective",
+    "examples": [
+      {
+        "en": "The storm caused widespread damage to the city.",
+        "vi": "Cơn bão gây ra thiệt hại lan rộng cho thành phố."
+      }
+    ],
+    "topic": "General",
+    "level": "B2",
+    "synonyms": ["extensive", "common"],
+    "antonyms": ["limited", "rare"],
+    "note": ""
+  }
+]
