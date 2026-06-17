@@ -143,7 +143,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className={`dashboard ${darkMode ? 'dark' : 'light'} ${pathname.startsWith('/practice') ? 'zen-mode' : ''}`}>
+    <div className={`dashboard ${darkMode ? 'dark' : 'light'}`}>
       <Sidebar
         darkMode={darkMode}
         setDarkMode={setDarkMode}

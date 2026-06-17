@@ -296,7 +296,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     };
 
     try {
-      const method = editingId ? 'PATCH' : 'POST';
+      const method = editingId ? 'PUT' : 'POST';
       const url = editingId ? `${API_URL}/${editingId}` : API_URL;
       const res = await fetch(url, {
         method,

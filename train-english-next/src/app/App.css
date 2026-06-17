@@ -345,11 +345,11 @@ body {
   transition: margin-left var(--transition);
 }
 
-.sidebar.collapsed ~ .main-area {
+.sb.sb--collapsed ~ .main-area {
   margin-left: var(--sidebar-collapsed);
 }
 
-.zen-mode .sidebar {
+.zen-mode .sb {
   transform: translateX(-100%);
   width: 0;
 }
@@ -3223,7 +3223,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 0;
+  padding: 220px 0 20px 0;
   gap: 16px;
 }
 
