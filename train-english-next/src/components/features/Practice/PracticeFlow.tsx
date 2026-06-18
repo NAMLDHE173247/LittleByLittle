@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
+import { toast } from 'sonner'
 import AudioVisualizer from './AudioVisualizer'
 import './PracticeFlow.css'
 import {
@@ -12,7 +13,8 @@ import {
   SpeakerWaveIcon,
   LightBulbIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  HeartIcon
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/AuthContext'
 
@@ -28,7 +30,7 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
   const { authHeaders } = useAuth()
   // Setup state
   const [step, setStep] = useState<number>(0) // 0 = Setup, 1-6 = Steps, 7 = Complete
-  const [wordCount, setWordCount] = useState<number>(8)
+  const [wordCount, setWordCount] = useState<number>(4)
   const [customWordCount, setCustomWordCount] = useState<string>('')
   
   // Custom Filters
@@ -49,6 +51,54 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
     5: true, // Nhập từ
     6: true, // Phát âm
   })
+
+  // Load Preset
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('practice_preset')
+      if (saved) {
+        const p = JSON.parse(saved)
+        if (p.wordCount) setWordCount(p.wordCount)
+        if (p.customWordCount !== undefined) setCustomWordCount(p.customWordCount)
+        if (p.sourceMode) setSourceMode(p.sourceMode)
+        if (p.filterTier) setFilterTier(p.filterTier)
+        if (p.filterDeck !== undefined) setFilterDeck(p.filterDeck)
+        if (p.enablePoints !== undefined) setEnablePoints(p.enablePoints)
+        if (p.enableRepeat !== undefined) setEnableRepeat(p.enableRepeat)
+        if (p.selectedSteps) setSelectedSteps(p.selectedSteps)
+      }
+    } catch (e) {}
+  }, [])
+
+  const savePreset = () => {
+    const preset = {
+      wordCount, customWordCount, sourceMode, filterTier, filterDeck, enablePoints, enableRepeat, selectedSteps
+    }
+    localStorage.setItem('practice_preset', JSON.stringify(preset))
+    toast.success('Đã lưu thiết lập luyện tập mặc định! 💖')
+  }
+
+  const applyPreset = (type: 'new' | 'learning' | 'review') => {
+    if (type === 'new') {
+      setSourceMode('oldest') // Học từ mới thì nên lấy từ cũ nhất (thêm lâu nhất) nhưng chưa học
+      setFilterTier('not_started')
+      setWordCount(4)
+      setSelectedSteps({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: true })
+      toast.success('Đã áp dụng: Chế độ Học từ mới ✨')
+    } else if (type === 'learning') {
+      setSourceMode('lowest_score')
+      setFilterTier('learning')
+      setWordCount(8)
+      setSelectedSteps({ 1: true, 2: false, 3: true, 4: true, 5: true, 6: true })
+      toast.success('Đã áp dụng: Chế độ Rèn từ đang học 💪')
+    } else if (type === 'review') {
+      setSourceMode('overdue')
+      setFilterTier('all')
+      setWordCount(12)
+      setSelectedSteps({ 1: false, 2: false, 3: true, 4: true, 5: true, 6: true })
+      toast.success('Đã áp dụng: Chế độ Ôn từ cũ 🔄')
+    }
+  }
 
   // Data
   const [words, setWords] = useState<any[]>([])
@@ -485,14 +535,26 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
         
         <div className="practice-setup wide-setup">
           <div className="practice-setup-card wide-card">
-            <div className="practice-setup-header">
-              <div className="practice-setup-icon">
-                <AcademicCapIcon className="icon" />
+            <div className="practice-setup-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div className="practice-setup-icon">
+                  <AcademicCapIcon className="icon" />
+                </div>
+                <div className="practice-setup-title-group">
+                  <h2 className="practice-setup-title">Luyện tập Từ vựng</h2>
+                  <p className="practice-setup-subtitle">Tùy chỉnh danh sách và các bước để bắt đầu luyện tập</p>
+                </div>
               </div>
-              <div className="practice-setup-title-group">
-                <h2 className="practice-setup-title">Luyện tập Từ vựng</h2>
-                <p className="practice-setup-subtitle">Tùy chỉnh danh sách và các bước để bắt đầu luyện tập</p>
-              </div>
+              <button className="btn-outline" onClick={savePreset} title="Lưu làm mặc định khi mở trang">
+                <HeartIcon className="icon icon-inline" style={{ color: '#ec4899' }} /> Đặt làm mặc định
+              </button>
+            </div>
+
+            <div style={{ padding: '0 24px 20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>Gợi ý nhanh:</span>
+              <button className="btn-outline" onClick={() => applyPreset('new')} style={{ borderColor: '#3b82f6', color: '#3b82f6', background: 'rgba(59,130,246,0.05)' }}>✨ Học từ mới</button>
+              <button className="btn-outline" onClick={() => applyPreset('learning')} style={{ borderColor: '#f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.05)' }}>💪 Rèn từ đang học</button>
+              <button className="btn-outline" onClick={() => applyPreset('review')} style={{ borderColor: '#10b981', color: '#10b981', background: 'rgba(16,185,129,0.05)' }}>🔄 Ôn từ quên lãng</button>
             </div>
 
             <div className="setup-grid wide-grid">

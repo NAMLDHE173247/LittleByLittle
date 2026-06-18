@@ -17,9 +17,14 @@ interface StatisticsPageProps {
   seedingDemo: boolean
   seedDemoData: () => void
   getLevelColor: (level: string) => string
+  activityData: any[]
+  activityLoading: boolean
 }
 
 
+
+import HeatmapChart from './HeatmapChart'
+import DailyActivityBarChart from './DailyActivityBarChart'
 
 export default function StatisticsPage({
   progressData,
@@ -27,13 +32,15 @@ export default function StatisticsPage({
   seedingDemo,
   seedDemoData,
   getLevelColor,
+  activityData,
+  activityLoading,
 }: StatisticsPageProps) {
   return (
     <>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Thống kê</h1>
-          <p className="page-subtitle">Thống kê tổng quan về Recall, Listening, Writing & Pronunciation</p>
+          <h1 className="page-title">Nhật ký</h1>
+          <p className="page-subtitle">Nhật ký tổng quan về Recall, Listening, Writing & Pronunciation</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button className="btn-primary" onClick={seedDemoData} disabled={seedingDemo}>
@@ -46,16 +53,16 @@ export default function StatisticsPage({
         </div>
       </div>
 
-      {progressLoading ? (
+      {progressLoading || activityLoading ? (
         <div className="loading-state">
           <div className="spinner"></div>
             <p>Đang tải dữ liệu...</p>
         </div>
       ) : progressData ? (
         <>
-        <div className="card" style={{ padding: '24px', marginBottom: '24px', textAlign: 'center' }}>
-          <h3 style={{ marginBottom: '8px', fontWeight: 600, fontSize: '18px' }}>Mức độ chăm chỉ (30 ngày qua)</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>🚧 Đang phát triển</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '32px' }}>
+          <HeatmapChart data={activityData} />
+          <DailyActivityBarChart data={activityData} />
         </div>
         {/* Decay Alert Banner removed — decay is now calculated in real-time */}
 

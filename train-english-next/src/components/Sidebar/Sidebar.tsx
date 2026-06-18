@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   ChartBarIcon, BookOpenIcon, RectangleStackIcon, AcademicCapIcon,
   TrophyIcon, SunIcon, MoonIcon, ArrowRightStartOnRectangleIcon,
-  ChevronLeftIcon, ChevronRightIcon, LightBulbIcon, QuestionMarkCircleIcon, UserGroupIcon
+  ChevronLeftIcon, ChevronRightIcon, LightBulbIcon, QuestionMarkCircleIcon, UserGroupIcon, FireIcon
 } from '@heroicons/react/24/outline'
 import './Sidebar.css'
 
@@ -17,7 +17,7 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { icon: <ChartBarIcon className="sb-icon" />, label: 'Thống kê', key: 'statistics' },
+  { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🔥</span>, label: 'Nhật ký', key: 'statistics' },
   { icon: <img src="/mastery-icon.png" alt="mastery" className="sb-icon" style={{ width: 22, height: 22 }} />, label: 'Độ thông thạo', key: 'mastery' },
   { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🐝</span>, label: 'Cày thông thạo', key: 'practice' },
   { icon: <BookOpenIcon className="sb-icon" />, label: 'Từ vựng', key: 'vocabulary' },

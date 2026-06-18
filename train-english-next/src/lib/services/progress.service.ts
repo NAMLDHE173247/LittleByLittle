@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import User from "../db/models/User";
 import { UserWordProgress, Vocabulary } from "../db/models";
+import { DailyActivity } from "../db/models/DailyActivity";
 import dbConnect from "../db/connection";
 import {
   calculateDecay,
@@ -353,7 +354,7 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
 // ================================================================
 // POST /api/progress/review — Ôn tập 1 từ (Lazy Evaluation: apply decay trước khi tính điểm)
 // ================================================================
-export const reviewWord = async (payload: { wordId: string; skill: string; correct: boolean; timezone?: string }, userId: string) => {
+export const reviewWord = async (payload: { wordId: string; skill: string; correct: boolean; timezone?: string; clientDateString?: string }, userId: string) => {
   await dbConnect();
   try {
     const { wordId, skill, correct } = payload;
@@ -477,6 +478,37 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
       }
     );
 
+    // ============================================================================
+    // LOGIC GAMIFICATION: Ghi nhận hoạt động hàng ngày (Daily Activity Upsert)
+    // ============================================================================
+    let todayTotalReviews = 0;
+
+    try {
+      // Fallback: Nếu FE chưa gửi, tự format ngày server về chuẩn YYYY-MM-DD
+      const todayStr = payload.clientDateString || new Date().toLocaleDateString('en-CA'); 
+
+      const updatedActivity = await DailyActivity.findOneAndUpdate(
+        { 
+          userId: userObjId, 
+          dateString: todayStr 
+        },
+        { 
+          $inc: { 
+            totalReviews: 1,
+            [`skills.${skill}`]: 1
+          } 
+        },
+        { 
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true
+        }
+      );
+      todayTotalReviews = updatedActivity.totalReviews;
+    } catch (err) {
+      console.error("Lỗi khi ghi nhận Daily Activity:", err);
+    }
+
     // Get tier info
     const getTier = (pts: number) => {
       if (pts >= 80) return "mastered";
@@ -497,6 +529,7 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
         previousTier: getTier(decayedPoints),
         newTier: getTier(newPoints),
         nextReview: nextReview.toISOString(),
+        todayTotalReviews, // Return this for frontend gamification
       },
     };
   } catch (error) {
