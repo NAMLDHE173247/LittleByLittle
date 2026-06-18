@@ -186,8 +186,8 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       const json = await res.json();
       if (json.success) {
         setVocabularies(json.data);
-        setTotalPagesState(json.totalPages);
-        setTotalFiltered(json.totalCount);
+        setTotalPagesState(json.pagination?.totalPages || 1);
+        setTotalFiltered(json.pagination?.total || 0);
       } else {
         setError('Failed to fetch data');
       }

@@ -64,14 +64,11 @@ export const getStats = async (userId: string) => {
   try {
     // const userId = userId;
 
-    // 1. Apply decay trước khi tính stats
-    const decaySummary = await applyDecayBatch(userId);
-
-    // 2. Đọc lại data sau decay
-    const totalWords = await Vocabulary.countDocuments();
-    const progresses = await UserWordProgress.find({
-      userId,
-    });
+    // Đọc data (decay giờ chỉ chạy khi user bấm refresh thủ công)
+    const [totalWords, progresses] = await Promise.all([
+      Vocabulary.countDocuments(),
+      UserWordProgress.find({ userId }),
+    ]);
 
     const now = new Date();
     const skills = ["recall", "listening", "writing", "pronunciation"] as const;
@@ -177,11 +174,7 @@ export const getStats = async (userId: string) => {
         overallPercent,
         skills: skillStats,
         recentActivity,
-        decay: {
-          decayedCount: decaySummary.decayedCount,
-          totalDecayedPoints: decaySummary.totalDecayedPoints,
-          appliedAt: now.toISOString(),
-        },
+        decay: null,
         streak: await User.findById(userId).then(u => u?.streak || 0)
       },};
   } catch (error) {
@@ -279,7 +272,7 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
     const tierFilter = (payload.tier as string) || "all";
     const deckId = payload.deckId as string;
 
-    await applyDecayBatch(userId);
+    // Decay giờ chỉ chạy khi user bấm refresh thủ công
 
     // 1. Filter Vocabulary
     const vocabQuery: any = {};
@@ -625,8 +618,7 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
 
-    // 1. Apply decay first
-    await applyDecayBatch(userId);
+    // Decay giờ chỉ chạy khi user bấm refresh thủ công
 
     // 2. Get all vocabularies
     const searchFilter: any = {};

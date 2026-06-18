@@ -6,7 +6,8 @@ import {
   SpeakerWaveIcon,
   PencilSquareIcon,
   BookOpenIcon,
-  PlusIcon
+  PlusIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import type { ProgressData } from '../../../types'
 import './StatisticsPage.css'
@@ -17,6 +18,8 @@ interface StatisticsPageProps {
   seedingDemo: boolean
   seedDemoData: () => void
   getLevelColor: (level: string) => string
+  refreshDecay: () => void
+  refreshingDecay: boolean
 }
 
 
@@ -26,7 +29,9 @@ export default function StatisticsPage({
   progressLoading,
   seedingDemo,
   seedDemoData,
-  getLevelColor
+  getLevelColor,
+  refreshDecay,
+  refreshingDecay
 }: StatisticsPageProps) {
   return (
     <>
@@ -35,13 +40,22 @@ export default function StatisticsPage({
           <h1 className="page-title">Thống kê</h1>
           <p className="page-subtitle">Thống kê tổng quan về Recall, Listening, Writing & Pronunciation</p>
         </div>
-        <button className="btn-primary" onClick={seedDemoData} disabled={seedingDemo}>
-          {seedingDemo ? (
-            <><span className="spinner-sm"></span> Đang tạo...</>
-          ) : (
-            <><PlusIcon className="icon icon-inline" /> Tạo dữ liệu mẫu</>
-          )}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-outline" onClick={refreshDecay} disabled={refreshingDecay}>
+            {refreshingDecay ? (
+              <><ArrowPathIcon className="icon icon-inline" style={{ animation: 'spin 1s linear infinite' }} /> Đang cập nhật...</>
+            ) : (
+              <><ArrowPathIcon className="icon icon-inline" /> Cập nhật Decay</>
+            )}
+          </button>
+          <button className="btn-primary" onClick={seedDemoData} disabled={seedingDemo}>
+            {seedingDemo ? (
+              <><span className="spinner-sm"></span> Đang tạo...</>
+            ) : (
+              <><PlusIcon className="icon icon-inline" /> Tạo dữ liệu mẫu</>
+            )}
+          </button>
+        </div>
       </div>
 
       {progressLoading ? (

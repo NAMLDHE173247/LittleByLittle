@@ -4,12 +4,14 @@ import dbConnect from "../db/connection";
 export class VocabularyService {
   static async getMetadata() {
     await dbConnect();
-    const totalWords = await Vocabulary.countDocuments({ type: "word" });
-    const totalPhrases = await Vocabulary.countDocuments({ type: "phrase" });
+    const [totalWords, totalPhrases, uniqueTopics, uniqueLevels, uniquePartsOfSpeech] = await Promise.all([
+      Vocabulary.countDocuments({ type: "word" }),
+      Vocabulary.countDocuments({ type: "phrase" }),
+      Vocabulary.distinct("topic"),
+      Vocabulary.distinct("level"),
+      Vocabulary.distinct("partOfSpeech"),
+    ]);
     const total = totalWords + totalPhrases;
-    const uniqueTopics = await Vocabulary.distinct("topic");
-    const uniqueLevels = await Vocabulary.distinct("level");
-    const uniquePartsOfSpeech = await Vocabulary.distinct("partOfSpeech");
 
     return {
       total,
