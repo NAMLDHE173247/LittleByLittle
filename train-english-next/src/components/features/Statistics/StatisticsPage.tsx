@@ -7,7 +7,6 @@ import {
   PencilSquareIcon,
   BookOpenIcon,
   PlusIcon,
-  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import type { ProgressData } from '../../../types'
 import './StatisticsPage.css'
@@ -18,8 +17,6 @@ interface StatisticsPageProps {
   seedingDemo: boolean
   seedDemoData: () => void
   getLevelColor: (level: string) => string
-  refreshDecay: () => void
-  refreshingDecay: boolean
 }
 
 
@@ -30,8 +27,6 @@ export default function StatisticsPage({
   seedingDemo,
   seedDemoData,
   getLevelColor,
-  refreshDecay,
-  refreshingDecay
 }: StatisticsPageProps) {
   return (
     <>
@@ -41,13 +36,6 @@ export default function StatisticsPage({
           <p className="page-subtitle">Thống kê tổng quan về Recall, Listening, Writing & Pronunciation</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-outline" onClick={refreshDecay} disabled={refreshingDecay}>
-            {refreshingDecay ? (
-              <><ArrowPathIcon className="icon icon-inline" style={{ animation: 'spin 1s linear infinite' }} /> Đang cập nhật...</>
-            ) : (
-              <><ArrowPathIcon className="icon icon-inline" /> Cập nhật Decay</>
-            )}
-          </button>
           <button className="btn-primary" onClick={seedDemoData} disabled={seedingDemo}>
             {seedingDemo ? (
               <><span className="spinner-sm"></span> Đang tạo...</>
@@ -69,21 +57,7 @@ export default function StatisticsPage({
           <h3 style={{ marginBottom: '8px', fontWeight: 600, fontSize: '18px' }}>Mức độ chăm chỉ (30 ngày qua)</h3>
           <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>🚧 Đang phát triển</p>
         </div>
-        {/* Decay Alert Banner */}
-        {progressData.decay && progressData.decay.decayedCount > 0 && (
-          <div className="decay-alert-banner">
-            <div className="decay-alert-left">
-              <ArrowTrendingDownIcon className="icon" />
-              <div className="decay-alert-text">
-                <strong>⚠ {progressData.decay.decayedCount} từ đang mất điểm</strong>
-                <span>Tổng cộng <strong>−{progressData.decay.totalDecayedPoints} điểm</strong> bị trừ do chưa ôn tập đúng hạn</span>
-              </div>
-            </div>
-            <div className="decay-alert-right">
-              <span className="decay-alert-time">Cập nhật: {new Date(progressData.decay.appliedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          </div>
-        )}
+        {/* Decay Alert Banner removed — decay is now calculated in real-time */}
 
         {/* Overall Proficiency */}
         <div className="proficiency-overview">
@@ -134,38 +108,7 @@ export default function StatisticsPage({
           </div>
         </div>
 
-        {/* Decay Breakdown Card */}
-        {progressData.decay && progressData.decay.decayedCount > 0 && (
-          <div className="decay-breakdown-card">
-            <div className="decay-breakdown-header">
-              <ArrowTrendingDownIcon className="icon" />
-              <h3>Chi tiết giảm điểm</h3>
-            </div>
-            <div className="decay-breakdown-stats">
-              <div className="decay-stat-item">
-                <span className="decay-stat-value">{progressData.decay.decayedCount}</span>
-                <span className="decay-stat-label">Từ bị decay</span>
-              </div>
-              <div className="decay-stat-item">
-                <span className="decay-stat-value decay-negative">−{progressData.decay.totalDecayedPoints}</span>
-                <span className="decay-stat-label">Điểm bị trừ</span>
-              </div>
-              <div className="decay-stat-item">
-                <span className="decay-stat-value">{progressData.skills.reduce((s: any, sk: any) => s + sk.dueForReview, 0)}</span>
-                <span className="decay-stat-label">Cần ôn tập</span>
-              </div>
-              <div className="decay-stat-item">
-                <span className="decay-stat-value decay-warning">
-                  {progressData.skills.reduce((s: any, sk: any) => {
-                    // Count words near tier boundary (within 10 pts of dropping)
-                    return s + sk.familiar // words at 40-79 that could drop to learning
-                  }, 0)}
-                </span>
-                <span className="decay-stat-label">Sắp rớt tier</span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Decay Breakdown Card removed — decay is now calculated in real-time */}
 
         {/* Per-Skill Cards */}
         <div className="proficiency-skills-grid">

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Vocabulary } from './src/lib/db/models/index.ts';
+import { Vocabulary } from './src/lib/db/models/index';
 import dbConnect from './src/lib/db/connection';
 
 async function run() {

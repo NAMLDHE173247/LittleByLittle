@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 export interface ISkillProgress {
   points: number;
   nextReview: Date;
+  intervalDays?: number;
 }
 
 export interface IUserWordProgress {

@@ -82,24 +82,42 @@ export function calculateDecay(
 }
 
 /**
- * Tính nextReview mới dựa trên điểm hiện tại
+ * Tính nextReview mới dựa trên điểm hiện tại và khoảng thời gian ôn tập hiện tại
  */
-export function getNextReviewDate(points: number, fromDate: Date = new Date()): Date {
+export function getNextReviewDate(
+  points: number,
+  currentIntervalDays: number = 0,
+  fromDate: Date = new Date()
+): { nextReview: Date; newIntervalDays: number } {
   const result = new Date(fromDate);
+  let newIntervalDays = 0;
 
   for (const interval of REVIEW_INTERVALS) {
     if (points >= interval.minPoints) {
       if ("days" in interval) {
-        result.setDate(result.getDate() + interval.days);
+        newIntervalDays = interval.days;
+        
+        // Multiplier logic for Mastered words
+        if (points >= 80) { // Default is 14 days
+          if (currentIntervalDays >= 14) {
+             // Multiply by 2 for each consecutive correct answer while Mastered
+             newIntervalDays = currentIntervalDays * 2;
+             // Cap at 180 days (6 months)
+             if (newIntervalDays > 180) newIntervalDays = 180;
+          }
+        }
+        
+        result.setDate(result.getDate() + newIntervalDays);
       } else if ("hours" in interval) {
         result.setHours(result.getHours() + interval.hours);
+        newIntervalDays = 0; // Hours are considered 0 days for interval tracking
       }
-      return result;
+      return { nextReview: result, newIntervalDays };
     }
   }
 
   // points === 0: review ngay lập tức
-  return result;
+  return { nextReview: result, newIntervalDays: 0 };
 }
 
 /**

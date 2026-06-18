@@ -14,6 +14,10 @@ const SkillProgressSchema = new Schema<ISkillProgress>(
       type: Date,
       default: Date.now,
     },
+    intervalDays: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );

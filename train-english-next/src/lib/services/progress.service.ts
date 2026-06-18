@@ -3,111 +3,86 @@ import User from "../db/models/User";
 import { UserWordProgress, Vocabulary } from "../db/models";
 import dbConnect from "../db/connection";
 import {
-  applyDecayToProgress,
+  calculateDecay,
   calculateAnswerPoints,
   getNextReviewDate,
 } from "../utils/decayCalculator";
 
 
 
-// ===== HELPER: Apply decay to all overdue records =====
-async function applyDecayBatch(userId: string) {
-  const now = new Date();
-  const progresses = await UserWordProgress.find({ userId });
+const SKILLS = ["recall", "listening", "writing", "pronunciation"] as const;
 
-  let decayedCount = 0;
-  let totalDecayedPoints = 0;
-  const bulkOps: any[] = [];
-
-  for (const progress of progresses) {
-    const result = applyDecayToProgress(progress, now);
-
-    if (result.changed) {
-      decayedCount++;
-      totalDecayedPoints += result.totalPointsLost;
-
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: progress._id },
-          update: {
-            $set: {
-              "skills.recall.points": result.skills.recall.points,
-              "skills.recall.nextReview": result.skills.recall.nextReview,
-              "skills.listening.points": result.skills.listening.points,
-              "skills.listening.nextReview": result.skills.listening.nextReview,
-              "skills.writing.points": result.skills.writing.points,
-              "skills.writing.nextReview": result.skills.writing.nextReview,
-              "skills.pronunciation.points":
-                result.skills.pronunciation.points,
-              "skills.pronunciation.nextReview":
-                result.skills.pronunciation.nextReview,
-            },
-          },
-        },
-      });
-    }
-  }
-
-  // Batch write to DB
-  if (bulkOps.length > 0) {
-    await UserWordProgress.bulkWrite(bulkOps);
-  }
-
-  return { decayedCount, totalDecayedPoints };
+// ===== HELPER: Tính decay in-memory (Lazy Evaluation — KHÔNG ghi DB) =====
+function getDecayedSkillPoints(
+  skillData: { points: number; nextReview: Date },
+  now: Date
+): number {
+  if (!skillData || skillData.points === 0) return 0;
+  const { decayedPoints } = calculateDecay(
+    skillData.points,
+    new Date(skillData.nextReview),
+    now
+  );
+  return decayedPoints;
 }
 
 // ================================================================
-// GET /api/progress/stats — Thống kê tổng quan (có apply decay)
+// GET /api/progress/stats — Thống kê tổng quan (Lazy Evaluation)
 // ================================================================
-export const getStats = async (userId: string) => { 
+export const getStats = async (userId: string) => {
   await dbConnect();
   try {
-    // const userId = userId;
-
-    // Đọc data (decay giờ chỉ chạy khi user bấm refresh thủ công)
     const [totalWords, progresses] = await Promise.all([
       Vocabulary.countDocuments(),
-      UserWordProgress.find({ userId }),
+      UserWordProgress.find({ userId }).lean(),
     ]);
 
     const now = new Date();
-    const skills = ["recall", "listening", "writing", "pronunciation"] as const;
 
-    // 3. Calculate per-skill stats
-    const skillStats = skills.map((skill) => {
-      const wordsWithProgress = progresses.filter(
-        (p) => p.skills[skill].points > 0
+    // Tính decay in-memory cho tất cả progress (KHÔNG ghi DB)
+    const decayedProgresses = progresses.map((p) => {
+      const decayed: Record<string, number> = {};
+      for (const skill of SKILLS) {
+        decayed[skill] = getDecayedSkillPoints(p.skills[skill], now);
+      }
+      return { ...p, _decayed: decayed };
+    });
+
+    // Calculate per-skill stats using decayed points
+    const skillStats = SKILLS.map((skill) => {
+      const wordsWithProgress = decayedProgresses.filter(
+        (p) => p._decayed[skill] > 0
       );
-      const totalPoints = progresses.reduce(
-        (sum, p) => sum + p.skills[skill].points,
+      const totalPoints = decayedProgresses.reduce(
+        (sum, p) => sum + p._decayed[skill],
         0
       );
       const maxPossiblePoints = totalWords * 100;
 
-      // Proficiency tiers
-      const mastered = progresses.filter(
-        (p) => p.skills[skill].points >= 80
+      // Proficiency tiers (based on decayed points)
+      const mastered = decayedProgresses.filter(
+        (p) => p._decayed[skill] >= 80
       ).length;
-      const familiar = progresses.filter(
-        (p) => p.skills[skill].points >= 40 && p.skills[skill].points < 80
+      const familiar = decayedProgresses.filter(
+        (p) => p._decayed[skill] >= 40 && p._decayed[skill] < 80
       ).length;
-      const learning = progresses.filter(
-        (p) => p.skills[skill].points > 0 && p.skills[skill].points < 40
+      const learning = decayedProgresses.filter(
+        (p) => p._decayed[skill] > 0 && p._decayed[skill] < 40
       ).length;
       const notStarted = totalWords - wordsWithProgress.length;
 
-      // Due for review
-      const dueForReview = progresses.filter(
-        (p) => p.skills[skill].nextReview <= now && p.skills[skill].points > 0
+      // Due for review: nextReview đã quá hạn VÀ decayed points > 0
+      const dueForReview = decayedProgresses.filter(
+        (p) =>
+          new Date(p.skills[skill].nextReview) <= now &&
+          p._decayed[skill] > 0
       ).length;
 
-      // Average points of words that have progress
       const avgPoints =
         wordsWithProgress.length > 0
           ? Math.round(totalPoints / wordsWithProgress.length)
           : 0;
 
-      // Overall proficiency percentage
       const proficiencyPercent =
         maxPossiblePoints > 0
           ? Math.round((totalPoints / maxPossiblePoints) * 100)
@@ -136,32 +111,36 @@ export const getStats = async (userId: string) => {
     const overallPercent =
       overallMax > 0 ? Math.round((overallPoints / overallMax) * 100) : 0;
 
-    // Recently practiced words (last 10)
-    const recentProgresses = await UserWordProgress.find({
-      userId,
-    })
+    // Recently practiced words (last 10) — also with decay in-memory
+    const recentProgresses = await UserWordProgress.find({ userId })
       .sort({ updatedAt: -1 })
       .limit(10)
-      .populate("wordId", "word pronunciation level");
+      .populate("wordId", "word pronunciation level")
+      .lean();
 
-    // Build recent activity with decay status
-    const recentActivity = recentProgresses.map((p) => {
-      const recallOverdue = p.skills.recall?.nextReview <= now && p.skills.recall?.points > 0;
-      const listeningOverdue = p.skills.listening?.nextReview <= now && p.skills.listening?.points > 0;
-      const writingOverdue = p.skills.writing.nextReview <= now && p.skills.writing.points > 0;
-      const pronOverdue = p.skills.pronunciation.nextReview <= now && p.skills.pronunciation.points > 0;
+    const recentActivity = recentProgresses.map((p: any) => {
+      const decayedRecall = getDecayedSkillPoints(p.skills.recall, now);
+      const decayedListening = getDecayedSkillPoints(p.skills.listening, now);
+      const decayedWriting = getDecayedSkillPoints(p.skills.writing, now);
+      const decayedPron = getDecayedSkillPoints(p.skills.pronunciation, now);
+
+      const hasOverdue =
+        (new Date(p.skills.recall.nextReview) <= now && decayedRecall > 0) ||
+        (new Date(p.skills.listening.nextReview) <= now && decayedListening > 0) ||
+        (new Date(p.skills.writing.nextReview) <= now && decayedWriting > 0) ||
+        (new Date(p.skills.pronunciation.nextReview) <= now && decayedPron > 0);
 
       return {
-        word: (p.wordId as any)?.word || "Unknown",
-        pronunciation: (p.wordId as any)?.pronunciation || "",
-        level: (p.wordId as any)?.level || "A1",
+        word: p.wordId?.word || "Unknown",
+        pronunciation: p.wordId?.pronunciation || "",
+        level: p.wordId?.level || "A1",
         skills: {
-          recall: p.skills.recall?.points || 0,
-          listening: p.skills.listening?.points || 0,
-          writing: p.skills.writing.points,
-          pronunciation: p.skills.pronunciation.points,
+          recall: decayedRecall,
+          listening: decayedListening,
+          writing: decayedWriting,
+          pronunciation: decayedPron,
         },
-        isDecaying: recallOverdue || listeningOverdue || writingOverdue || pronOverdue,
+        isDecaying: hasOverdue,
         updatedAt: p.updatedAt,
       };
     });
@@ -174,23 +153,22 @@ export const getStats = async (userId: string) => {
         overallPercent,
         skills: skillStats,
         recentActivity,
-        decay: null,
-        streak: await User.findById(userId).then(u => u?.streak || 0)
-      },};
+        streak: await User.findById(userId).then((u) => u?.streak || 0),
+      },
+    };
   } catch (error) {
     throw error;
   }
 };
 
 // ================================================================
-// GET /api/progress/due — Lấy danh sách từ cần ôn tập
+// GET /api/progress/due — Lấy danh sách từ cần ôn tập (Lazy Evaluation)
 // ================================================================
-export const getDue = async (payload: { skill?: string; limit?: number }, userId: string) => { 
+export const getDue = async (payload: { skill?: string; limit?: number }, userId: string) => {
   await dbConnect();
   try {
-    // const userId = userId;
     const skill = (payload.skill as string) || "recall";
-    const limit = parseInt(payload.limit as string) || 10;
+    const limit = Number(payload.limit) || 10;
     const now = new Date();
 
     const validSkills = ["recall", "listening", "writing", "pronunciation"];
@@ -201,7 +179,7 @@ export const getDue = async (payload: { skill?: string; limit?: number }, userId
       }));
     }
 
-    // Find overdue words, sorted by most overdue first
+    // Query overdue words (nextReview đã quá hạn VÀ points gốc > 0)
     const overdueField = `skills.${skill}.nextReview`;
     const pointsField = `skills.${skill}.points`;
 
@@ -212,36 +190,42 @@ export const getDue = async (payload: { skill?: string; limit?: number }, userId
     })
       .sort({ [overdueField]: 1 }) // Most overdue first
       .limit(limit)
-      .populate("wordId", "word pronunciation meanings level type partOfSpeech topic");
+      .populate("wordId", "word pronunciation meanings level type partOfSpeech topic")
+      .lean();
 
     // Also include words never started (no progress record)
     const wordsWithProgress = await UserWordProgress.find({
       userId,
-    }).select("wordId");
+    }).select("wordId").lean();
     const progressWordIds = wordsWithProgress.map((p) => p.wordId.toString());
 
     const newWords = await Vocabulary.find({
       _id: { $nin: progressWordIds },
     })
       .limit(Math.max(0, limit - dueWords.length))
-      .select("word pronunciation meanings level type partOfSpeech topic");
+      .select("word pronunciation meanings level type partOfSpeech topic")
+      .lean();
 
     return {
       success: true,
       data: {
-        dueWords: dueWords.map((p) => ({
-          progressId: p._id,
-          wordId: (p.wordId as any)?._id,
-          word: (p.wordId as any)?.word || "Unknown",
-          pronunciation: (p.wordId as any)?.pronunciation || "",
-          meanings: (p.wordId as any)?.meanings || [],
-          level: (p.wordId as any)?.level || "A1",
-          type: (p.wordId as any)?.type || "word",
-          currentPoints: (p.skills as any)[skill].points,
-          nextReview: (p.skills as any)[skill].nextReview,
-          status: "overdue",
-        })),
-        newWords: newWords.map((v) => ({
+        dueWords: dueWords.map((p: any) => {
+          // Tính decay in-memory cho skill này
+          const decayedPoints = getDecayedSkillPoints(p.skills[skill], now);
+          return {
+            progressId: p._id,
+            wordId: p.wordId?._id,
+            word: p.wordId?.word || "Unknown",
+            pronunciation: p.wordId?.pronunciation || "",
+            meanings: p.wordId?.meanings || [],
+            level: p.wordId?.level || "A1",
+            type: p.wordId?.type || "word",
+            currentPoints: decayedPoints,
+            nextReview: p.skills[skill].nextReview,
+            status: "overdue",
+          };
+        }),
+        newWords: newWords.map((v: any) => ({
           wordId: v._id,
           word: v.word,
           pronunciation: v.pronunciation,
@@ -254,7 +238,8 @@ export const getDue = async (payload: { skill?: string; limit?: number }, userId
         skill,
         totalDue: dueWords.length,
         totalNew: newWords.length,
-      },};
+      },
+    };
   } catch (error) {
     throw error;
   }
@@ -266,13 +251,10 @@ export const getDue = async (payload: { skill?: string; limit?: number }, userId
 export const getPracticeWords = async (payload: { count?: number; mode?: string; tier?: string; deckId?: string }, userId: string) => { 
   await dbConnect();
   try {
-    // const userId = userId;
-    const count = parseInt(payload.count as string) || 8;
+    const count = Number(payload.count) || 8;
     const mode = (payload.mode as string) || "lowest_score";
     const tierFilter = (payload.tier as string) || "all";
     const deckId = payload.deckId as string;
-
-    // Decay giờ chỉ chạy khi user bấm refresh thủ công
 
     // 1. Filter Vocabulary
     const vocabQuery: any = {};
@@ -287,13 +269,14 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
 
     const now = new Date();
 
-    // 3. Calculate score & tier for each word
+    // 3. Calculate score & tier for each word (decay in-memory)
     let wordScores = allVocabs.map((vocab) => {
       const progress = progressMap.get(vocab._id.toString());
-      const recall = progress?.skills?.recall?.points ?? 0;
-      const listening = progress?.skills?.listening?.points ?? 0;
-      const writing = progress?.skills?.writing?.points ?? 0;
-      const pronunciation = progress?.skills?.pronunciation?.points ?? 0;
+      // Tính decay in-memory thay vì dùng điểm gốc từ DB
+      const recall = progress ? getDecayedSkillPoints(progress.skills.recall, now) : 0;
+      const listening = progress ? getDecayedSkillPoints(progress.skills.listening, now) : 0;
+      const writing = progress ? getDecayedSkillPoints(progress.skills.writing, now) : 0;
+      const pronunciation = progress ? getDecayedSkillPoints(progress.skills.pronunciation, now) : 0;
       const overall = Math.round((recall + listening + writing + pronunciation) / 4);
 
       let tier = "not_started";
@@ -302,10 +285,10 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
       else if (overall > 0) tier = "learning";
 
       const isDecaying = progress
-        ? (progress.skills.recall?.nextReview <= now && recall > 0) ||
-          (progress.skills.listening?.nextReview <= now && listening > 0) ||
-          (progress.skills.writing.nextReview <= now && writing > 0) ||
-          (progress.skills.pronunciation.nextReview <= now && pronunciation > 0)
+        ? (new Date(progress.skills.recall?.nextReview) <= now && recall > 0) ||
+          (new Date(progress.skills.listening?.nextReview) <= now && listening > 0) ||
+          (new Date(progress.skills.writing.nextReview) <= now && writing > 0) ||
+          (new Date(progress.skills.pronunciation.nextReview) <= now && pronunciation > 0)
         : false;
 
       return {
@@ -360,16 +343,17 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
 
     return {
       success: true,
-      data: selected};
+      data: selected,
+    };
   } catch (error) {
     throw error;
   }
 };
 
 // ================================================================
-// POST /api/progress/review — Ôn tập 1 từ (cập nhật điểm)
+// POST /api/progress/review — Ôn tập 1 từ (Lazy Evaluation: apply decay trước khi tính điểm)
 // ================================================================
-export const reviewWord = async (payload: { wordId: string; skill: string; correct: boolean }, userId: string) => { 
+export const reviewWord = async (payload: { wordId: string; skill: string; correct: boolean; timezone?: string }, userId: string) => {
   await dbConnect();
   try {
     const { wordId, skill, correct } = payload;
@@ -392,6 +376,7 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
 
     const userObjId = new mongoose.Types.ObjectId(userId);
     const wordObjId = new mongoose.Types.ObjectId(wordId);
+    const now = new Date();
 
     // Find or create progress record
     let progress = await UserWordProgress.findOne({
@@ -404,10 +389,10 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
         userId: userObjId,
         wordId: wordObjId,
         skills: {
-          recall: { points: 0, nextReview: new Date() },
-          listening: { points: 0, nextReview: new Date() },
-          writing: { points: 0, nextReview: new Date() },
-          pronunciation: { points: 0, nextReview: new Date() },
+          recall: { points: 0, nextReview: now, intervalDays: 0 },
+          listening: { points: 0, nextReview: now, intervalDays: 0 },
+          writing: { points: 0, nextReview: now, intervalDays: 0 },
+          pronunciation: { points: 0, nextReview: now, intervalDays: 0 },
         },
       });
     }
@@ -417,17 +402,34 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
     let currentStreak = user?.streak || 0;
     
     if (user) {
-      const now = new Date();
       const lastStudy = user.lastStudyDate;
       if (!lastStudy) {
         currentStreak = 1;
       } else {
-        const lastStudyDate = new Date(lastStudy);
-        lastStudyDate.setHours(0, 0, 0, 0);
-        const todayDate = new Date(now);
-        todayDate.setHours(0, 0, 0, 0);
-        const diffTime = Math.abs(todayDate.getTime() - lastStudyDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const tz = payload.timezone || "Asia/Ho_Chi_Minh";
+        const formatter = new Intl.DateTimeFormat("en-US", { 
+          timeZone: tz, 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit' 
+        });
+
+        const formatParts = (date: Date) => {
+          const parts = formatter.formatToParts(date);
+          const y = parts.find(p => p.type === 'year')?.value;
+          const m = parts.find(p => p.type === 'month')?.value;
+          const d = parts.find(p => p.type === 'day')?.value;
+          return `${y}-${m}-${d}`;
+        };
+
+        const lastStudyStr = formatParts(new Date(lastStudy));
+        const todayStr = formatParts(now);
+
+        const lastStudyMidnight = new Date(`${lastStudyStr}T00:00:00Z`);
+        const todayMidnight = new Date(`${todayStr}T00:00:00Z`);
+
+        const diffTime = todayMidnight.getTime() - lastStudyMidnight.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
         
         if (diffDays === 1) {
           currentStreak += 1;
@@ -440,18 +442,29 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
       await user.save();
     }
 
-    // Calculate new points
-    const currentPoints = (progress.skills as any)[skill].points;
+    // === LAZY EVALUATION ===
+    // 1. Lấy điểm gốc từ DB
+    const rawPoints = (progress.skills as any)[skill].points;
+    const rawNextReview = (progress.skills as any)[skill].nextReview;
+    const rawIntervalDays = (progress.skills as any)[skill].intervalDays || 0;
+
+    // 2. Tính decay từ điểm gốc (in-memory, không ghi DB)
+    const decayedPoints = getDecayedSkillPoints(
+      { points: rawPoints, nextReview: rawNextReview },
+      now
+    );
+
+    // 3. Tính điểm mới DỰA TRÊN ĐIỂM ĐÃ DECAY (không phải điểm gốc DB)
     const { newPoints, pointsChange } = calculateAnswerPoints(
-      currentPoints,
+      decayedPoints,
       correct,
       currentStreak
     );
 
-    // Calculate next review date
-    const nextReview = getNextReviewDate(newPoints);
+    // 4. Tính mốc next review mới (kèm nhân số interval cho Mastered)
+    const { nextReview, newIntervalDays } = getNextReviewDate(newPoints, rawIntervalDays, now);
 
-    // Update in DB
+    // 5. GHI VÀO DB — Lần write DUY NHẤT
     const updatePath = `skills.${skill}`;
     await UserWordProgress.updateOne(
       { _id: progress._id },
@@ -459,6 +472,7 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
         $set: {
           [`${updatePath}.points`]: newPoints,
           [`${updatePath}.nextReview`]: nextReview,
+          [`${updatePath}.intervalDays`]: newIntervalDays,
         },
       }
     );
@@ -477,31 +491,14 @@ export const reviewWord = async (payload: { wordId: string; skill: string; corre
         wordId,
         skill,
         correct,
-        previousPoints: currentPoints,
+        previousPoints: decayedPoints,
         newPoints,
         pointsChange,
-        previousTier: getTier(currentPoints),
+        previousTier: getTier(decayedPoints),
         newTier: getTier(newPoints),
         nextReview: nextReview.toISOString(),
-      },};
-  } catch (error) {
-    throw error;
-  }
-};
-
-// ================================================================
-// POST /api/progress/apply-decay — Chạy decay thủ công (admin/debug)
-// ================================================================
-export const applyDecay = async (userId: string) => { 
-  await dbConnect();
-  try {
-    // const userId = userId;
-    const result = await applyDecayBatch(userId);
-
-    return {
-      success: true,
-      message: `Decay applied: ${result.decayedCount} words affected, ${result.totalDecayedPoints} total points lost`,
-      data: result,};
+      },
+    };
   } catch (error) {
     throw error;
   }
@@ -516,10 +513,10 @@ export const seedDemo = async (userId: string) => {
     // const userId = userId;
     const vocabularies = await Vocabulary.find().limit(50);
     if (vocabularies.length === 0) {
-      res
-        .status(400)
-        .json({ success: false, message: "No vocabularies found to seed" });
-      return;
+      throw new Error(JSON.stringify({
+        success: false,
+        message: "No vocabularies found to seed",
+      }));
     }
 
     const userObjId = new mongoose.Types.ObjectId(userId);
@@ -602,10 +599,9 @@ export const seedDemo = async (userId: string) => {
 // ================================================================
 // GET /api/progress/words — Danh sách từ vựng kèm điểm + filter
 // ================================================================
-export const getWords = async (payload: { tier?: string; search?: string; sort?: string; page?: string; limit?: string; skill?: string }, userId: string) => { 
+export const getWords = async (payload: { tier?: string; search?: string; sort?: string; page?: string; limit?: string; skill?: string }, userId: string) => {
   await dbConnect();
   try {
-    // const userId = userId;
     const {
       tier,
       search,
@@ -618,9 +614,7 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
 
-    // Decay giờ chỉ chạy khi user bấm refresh thủ công
-
-    // 2. Get all vocabularies
+    // Get all vocabularies
     const searchFilter: any = {};
     if (search) {
       searchFilter.word = { $regex: search, $options: "i" };
@@ -629,23 +623,22 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
       .select("word pronunciation level type partOfSpeech topic")
       .lean();
 
-    // 3. Get all progress records
-    const progresses = await UserWordProgress.find({
-      userId,
-    }).lean();
+    // Get all progress records
+    const progresses = await UserWordProgress.find({ userId }).lean();
     const progressMap = new Map(
       progresses.map((p) => [p.wordId.toString(), p])
     );
 
     const now = new Date();
 
-    // 4. Build word list with proficiency
+    // Build word list with proficiency (decay in-memory)
     let wordList = allVocabs.map((vocab) => {
       const progress = progressMap.get(vocab._id.toString());
-      const recall = progress?.skills?.recall?.points ?? 0;
-      const listening = progress?.skills?.listening?.points ?? 0;
-      const writing = progress?.skills?.writing?.points ?? 0;
-      const pronunciation = progress?.skills?.pronunciation?.points ?? 0;
+      // Tính decay in-memory thay vì dùng điểm gốc từ DB
+      const recall = progress ? getDecayedSkillPoints(progress.skills.recall, now) : 0;
+      const listening = progress ? getDecayedSkillPoints(progress.skills.listening, now) : 0;
+      const writing = progress ? getDecayedSkillPoints(progress.skills.writing, now) : 0;
+      const pronunciation = progress ? getDecayedSkillPoints(progress.skills.pronunciation, now) : 0;
       const overall = Math.round((recall + listening + writing + pronunciation) / 4);
 
       const getTier = (pts: number) => {
@@ -655,12 +648,12 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
         return "not_started";
       };
 
-      // Check if any skill is overdue
+      // Check if any skill is overdue (based on decayed points)
       const isDecaying = progress
-        ? (progress.skills.recall?.nextReview <= now && recall > 0) ||
-          (progress.skills.listening?.nextReview <= now && listening > 0) ||
-          (progress.skills.writing.nextReview <= now && writing > 0) ||
-          (progress.skills.pronunciation.nextReview <= now && pronunciation > 0)
+        ? (new Date(progress.skills.recall?.nextReview) <= now && recall > 0) ||
+          (new Date(progress.skills.listening?.nextReview) <= now && listening > 0) ||
+          (new Date(progress.skills.writing.nextReview) <= now && writing > 0) ||
+          (new Date(progress.skills.pronunciation.nextReview) <= now && pronunciation > 0)
         : false;
 
       return {
@@ -683,12 +676,12 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
       };
     });
 
-    // 5. Filter by tier
+    // Filter by tier
     if (tier && tier !== "all") {
       wordList = wordList.filter((w) => w.tier === tier);
     }
 
-    // 6. Sort
+    // Sort (in-memory — sort dựa trên điểm đã decay)
     const sortFns: Record<string, (a: any, b: any) => number> = {
       overall_desc: (a, b) => b.overall - a.overall,
       overall_asc: (a, b) => a.overall - b.overall,
@@ -702,13 +695,13 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
     const sortFn = sortFns[sort] || sortFns.overall_desc;
     wordList.sort(sortFn);
 
-    // 7. Paginate
+    // Paginate (in-memory)
     const totalItems = wordList.length;
     const totalPages = Math.ceil(totalItems / limitNum);
     const startIdx = (pageNum - 1) * limitNum;
     const paginatedWords = wordList.slice(startIdx, startIdx + limitNum);
 
-    // 8. Tier summary
+    // Tier summary
     const tierSummary = {
       mastered: wordList.filter((w) => w.tier === "mastered").length,
       familiar: wordList.filter((w) => w.tier === "familiar").length,
@@ -723,19 +716,19 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
         words: paginatedWords,
         pagination: { page: pageNum, totalPages, totalItems, limit: limitNum },
         tierSummary,
-      },};
+      },
+    };
   } catch (error) {
     throw error;
   }
 };
 
 // ================================================================
-// PATCH /api/progress/adjust — Tăng/giảm điểm thủ công
+// PATCH /api/progress/adjust — Tăng/giảm điểm thủ công (Lazy Evaluation)
 // ================================================================
-export const adjustProgress = async (payload: { wordId: string; skill: string; amount: number }, userId: string) => { 
+export const adjustProgress = async (payload: { wordId: string; skill: string; amount: number }, userId: string) => {
   await dbConnect();
   try {
-    // const userId = userId;
     const { wordId, skill, amount } = payload;
 
     if (!wordId || !skill || typeof amount !== "number") {
@@ -755,6 +748,7 @@ export const adjustProgress = async (payload: { wordId: string; skill: string; a
 
     const userObjId = new mongoose.Types.ObjectId(userId);
     const wordObjId = new mongoose.Types.ObjectId(wordId);
+    const now = new Date();
 
     let progress = await UserWordProgress.findOne({ userId: userObjId, wordId: wordObjId });
 
@@ -763,17 +757,26 @@ export const adjustProgress = async (payload: { wordId: string; skill: string; a
         userId: userObjId,
         wordId: wordObjId,
         skills: {
-          recall: { points: 0, nextReview: new Date() },
-          listening: { points: 0, nextReview: new Date() },
-          writing: { points: 0, nextReview: new Date() },
-          pronunciation: { points: 0, nextReview: new Date() },
+          recall: { points: 0, nextReview: now, intervalDays: 0 },
+          listening: { points: 0, nextReview: now, intervalDays: 0 },
+          writing: { points: 0, nextReview: now, intervalDays: 0 },
+          pronunciation: { points: 0, nextReview: now, intervalDays: 0 },
         },
       });
     }
 
-    const currentPoints = (progress.skills as any)[skill].points;
-    const newPoints = Math.max(0, Math.min(100, currentPoints + amount));
-    const nextReview = getNextReviewDate(newPoints);
+    // Tính decay trước khi adjust
+    const rawPoints = (progress.skills as any)[skill].points;
+    const rawNextReview = (progress.skills as any)[skill].nextReview;
+    const rawIntervalDays = (progress.skills as any)[skill].intervalDays || 0;
+    const decayedPoints = getDecayedSkillPoints(
+      { points: rawPoints, nextReview: rawNextReview },
+      now
+    );
+
+    // Adjust dựa trên điểm đã decay
+    const newPoints = Math.max(0, Math.min(100, decayedPoints + amount));
+    const { nextReview, newIntervalDays } = getNextReviewDate(newPoints, rawIntervalDays, now);
 
     await UserWordProgress.updateOne(
       { _id: progress._id },
@@ -781,6 +784,7 @@ export const adjustProgress = async (payload: { wordId: string; skill: string; a
         $set: {
           [`skills.${skill}.points`]: newPoints,
           [`skills.${skill}.nextReview`]: nextReview,
+          [`skills.${skill}.intervalDays`]: newIntervalDays,
         },
       }
     );
@@ -790,11 +794,12 @@ export const adjustProgress = async (payload: { wordId: string; skill: string; a
       data: {
         wordId,
         skill,
-        previousPoints: currentPoints,
+        previousPoints: decayedPoints,
         newPoints,
-        change: newPoints - currentPoints,
+        change: newPoints - decayedPoints,
         nextReview: nextReview.toISOString(),
-      },};
+      },
+    };
   } catch (error) {
     throw error;
   }

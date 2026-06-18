@@ -75,17 +75,11 @@ export interface RecentActivity {
   updatedAt: string
 }
 
-export interface DecaySummary {
-  decayedCount: number
-  totalDecayedPoints: number
-  appliedAt: string
-}
-
 export interface ProgressData {
   totalWords: number
   totalWordsWithProgress: number
   overallPercent: number
   skills: SkillStat[]
   recentActivity: RecentActivity[]
-  decay: DecaySummary
+  streak: number
 }
