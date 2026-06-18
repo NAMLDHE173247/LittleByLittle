@@ -53,6 +53,8 @@ export default function VocabularyPage({
   const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders } = actions;
 
   const [exporting, setExporting] = useState(false);
+  const [editingImageId, setEditingImageId] = useState<string | null>(null);
+  const [editingImageUrl, setEditingImageUrl] = useState<string>('');
 
   const exportToTxt = async () => {
     setExporting(true);
@@ -401,15 +403,82 @@ export default function VocabularyPage({
                           </td>
                         )}
                         <td className="col-img">
-                          {vocab.imageUrl ? (
+                          {editingImageId === vocab._id ? (
+                            <div className="inline-image-edit">
+                              <input
+                                type="text"
+                                className="inline-image-input"
+                                placeholder="Dán URL ảnh..."
+                                value={editingImageUrl}
+                                onChange={e => setEditingImageUrl(e.target.value)}
+                                onKeyDown={async e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    try {
+                                      const res = await fetch(`/api/vocabulary/${vocab._id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                        body: JSON.stringify({ imageUrl: editingImageUrl.trim() })
+                                      })
+                                      const result = await res.json()
+                                      if (result.success) {
+                                        vocab.imageUrl = editingImageUrl.trim()
+                                      }
+                                    } catch (err) { console.error(err) }
+                                    setEditingImageId(null)
+                                    setEditingImageUrl('')
+                                  } else if (e.key === 'Escape') {
+                                    setEditingImageId(null)
+                                    setEditingImageUrl('')
+                                  }
+                                }}
+                                onBlur={async () => {
+                                  if (editingImageUrl.trim() && editingImageUrl.trim() !== vocab.imageUrl) {
+                                    try {
+                                      const res = await fetch(`/api/vocabulary/${vocab._id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                        body: JSON.stringify({ imageUrl: editingImageUrl.trim() })
+                                      })
+                                      const result = await res.json()
+                                      if (result.success) {
+                                        vocab.imageUrl = editingImageUrl.trim()
+                                      }
+                                    } catch (err) { console.error(err) }
+                                  }
+                                  setEditingImageId(null)
+                                  setEditingImageUrl('')
+                                }}
+                                autoFocus
+                              />
+                              {editingImageUrl && (
+                                <img
+                                  className="inline-image-preview"
+                                  src={editingImageUrl}
+                                  alt="Preview"
+                                  onError={e => (e.currentTarget.style.display = 'none')}
+                                  onLoad={e => (e.currentTarget.style.display = 'block')}
+                                />
+                              )}
+                            </div>
+                          ) : vocab.imageUrl ? (
                             <img
                               className="table-thumb"
                               src={vocab.imageUrl}
                               alt={vocab.word}
                               onError={e => (e.currentTarget.src = '')}
+                              onClick={() => { setEditingImageId(vocab._id); setEditingImageUrl(vocab.imageUrl || '') }}
+                              style={{ cursor: 'pointer' }}
+                              title="Click để sửa ảnh"
                             />
                           ) : (
-                            <span className="table-thumb-empty"><PhotoIcon className="icon" /></span>
+                            <span
+                              className="table-thumb-empty table-thumb-empty--clickable"
+                              onClick={() => { setEditingImageId(vocab._id); setEditingImageUrl('') }}
+                              title="Click để thêm ảnh"
+                            >
+                              <PhotoIcon className="icon" />
+                            </span>
                           )}
                         </td>
                         <td className="col-word" onClick={() => setDetailVocab(vocab)}>

@@ -1,9 +1,9 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   ArrowDownTrayIcon, PlusIcon, XMarkIcon, CheckIcon, ClipboardDocumentIcon,
   ExclamationTriangleIcon, PencilSquareIcon, RectangleStackIcon, LightBulbIcon,
   TrashIcon, BookOpenIcon, SpeakerWaveIcon, LanguageIcon, ArrowsRightLeftIcon,
-  ArrowPathIcon, BookmarkIcon
+  ArrowPathIcon, BookmarkIcon, PhotoIcon
 } from '@heroicons/react/24/outline'
 import './VocabularyPage.css'
 
@@ -26,8 +26,14 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
     closeModal, setFormData, handleSave, addExample, updateExample, removeExample,
     setDeleteTarget, handleDelete, handleDeleteSelected,
     setQuickDeckVocab, setQuickDeckIds, handleSaveQuickDeck,
-    setDetailVocab, speak, setCopied, getLevelColor, openEditModal
+    setDetailVocab, speak, setCopied, getLevelColor, openEditModal,
+    authHeaders, fetchVocabularies
   } = modalsActions;
+
+  // State for inline image editing in detail view
+  const [detailImageUrl, setDetailImageUrl] = useState<string>('');
+  const [isEditingDetailImage, setIsEditingDetailImage] = useState(false);
+  const [savingDetailImage, setSavingDetailImage] = useState(false);
 
   return (
     <>
@@ -425,13 +431,102 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
 
             <div className="modal-body">
               {/* Image */}
-              {detailVocab.imageUrl && (
+              {detailVocab.imageUrl ? (
                 <div className="detail-image">
                   <img
                     src={detailVocab.imageUrl}
                     alt={detailVocab.word}
                     onError={e => (e.currentTarget.style.display = 'none')}
                   />
+                </div>
+              ) : (
+                <div className="detail-image-add">
+                  {isEditingDetailImage ? (
+                    <div className="detail-image-edit-form">
+                      <input
+                        type="text"
+                        className="detail-image-input"
+                        placeholder="Dán URL ảnh vào đây..."
+                        value={detailImageUrl}
+                        onChange={e => setDetailImageUrl(e.target.value)}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter' && detailImageUrl.trim()) {
+                            e.preventDefault()
+                            setSavingDetailImage(true)
+                            try {
+                              const res = await fetch(`/api/vocabulary/${detailVocab._id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                body: JSON.stringify({ imageUrl: detailImageUrl.trim() })
+                              })
+                              const result = await res.json()
+                              if (result.success) {
+                                setDetailVocab({ ...detailVocab, imageUrl: detailImageUrl.trim() })
+                                if (fetchVocabularies) fetchVocabularies()
+                              }
+                            } catch (err) { console.error(err) }
+                            setSavingDetailImage(false)
+                            setIsEditingDetailImage(false)
+                            setDetailImageUrl('')
+                          } else if (e.key === 'Escape') {
+                            setIsEditingDetailImage(false)
+                            setDetailImageUrl('')
+                          }
+                        }}
+                        autoFocus
+                      />
+                      {detailImageUrl && (
+                        <img
+                          className="detail-image-preview"
+                          src={detailImageUrl}
+                          alt="Preview"
+                          onError={e => (e.currentTarget.style.display = 'none')}
+                          onLoad={e => (e.currentTarget.style.display = 'block')}
+                        />
+                      )}
+                      <div className="detail-image-actions">
+                        <button
+                          className="btn-primary btn-sm"
+                          disabled={!detailImageUrl.trim() || savingDetailImage}
+                          onClick={async () => {
+                            if (!detailImageUrl.trim()) return
+                            setSavingDetailImage(true)
+                            try {
+                              const res = await fetch(`/api/vocabulary/${detailVocab._id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                                body: JSON.stringify({ imageUrl: detailImageUrl.trim() })
+                              })
+                              const result = await res.json()
+                              if (result.success) {
+                                setDetailVocab({ ...detailVocab, imageUrl: detailImageUrl.trim() })
+                                if (fetchVocabularies) fetchVocabularies()
+                              }
+                            } catch (err) { console.error(err) }
+                            setSavingDetailImage(false)
+                            setIsEditingDetailImage(false)
+                            setDetailImageUrl('')
+                          }}
+                        >
+                          {savingDetailImage ? 'Đang lưu...' : 'Lưu ảnh'}
+                        </button>
+                        <button
+                          className="btn-outline btn-sm"
+                          onClick={() => { setIsEditingDetailImage(false); setDetailImageUrl('') }}
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="detail-image-add-btn"
+                      onClick={() => setIsEditingDetailImage(true)}
+                    >
+                      <PhotoIcon className="icon" style={{ width: 28, height: 28 }} />
+                      <span>Thêm ảnh minh họa</span>
+                    </button>
+                  )}
                 </div>
               )}
 

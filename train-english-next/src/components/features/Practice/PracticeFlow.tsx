@@ -82,13 +82,20 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
     setCurrentQuizWord(wordObj)
     setSelectedAnswer(null)
     
-    // Generate options
-    const correct = wordObj.word
-    const others = allWords.filter(w => w.word !== correct).map(w => w.word)
+    // Generate options (Vietnamese meanings)
+    const correctMeaning = wordObj.meanings.join(', ')
+    const others = allWords
+      .filter(w => w.word !== wordObj.word)
+      .map(w => w.meanings.join(', '))
     const shuffledOthers = others.sort(() => 0.5 - Math.random()).slice(0, 3)
-    const options = [correct, ...shuffledOthers].sort(() => 0.5 - Math.random())
+    const options = [correctMeaning, ...shuffledOthers].sort(() => 0.5 - Math.random())
     setQuizOptions(options)
-  }, [])
+
+    // Auto play pronunciation
+    setTimeout(() => {
+      speakWord(wordObj.word)
+    }, 500)
+  }, [speakWord])
 
   useEffect(() => {
     if (step === 3 && words.length > 0) {
@@ -102,7 +109,8 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
   const handleQuizAnswer = (answer: string) => {
     if (selectedAnswer) return;
     setSelectedAnswer(answer)
-    const isCorrect = answer === currentQuizWord.word
+    const correctMeaning = currentQuizWord.meanings.join(', ')
+    const isCorrect = answer === correctMeaning
     
     if (enablePoints) {
        fetch(`${PROGRESS_API_URL}/review`, {
@@ -829,25 +837,36 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
               <motion.div 
                 className="quiz-card"
                 animate={
-                  selectedAnswer && selectedAnswer === currentQuizWord?.word ? { scale: [1, 1.02, 1] } 
-                  : selectedAnswer && selectedAnswer !== currentQuizWord?.word ? { x: [-10, 10, -10, 10, 0] } 
+                  selectedAnswer && selectedAnswer === currentQuizWord?.meanings.join(', ') ? { scale: [1, 1.02, 1] } 
+                  : selectedAnswer && selectedAnswer !== currentQuizWord?.meanings.join(', ') ? { x: [-10, 10, -10, 10, 0] } 
                   : {}
                 }
                 transition={{ duration: 0.4 }}
               >
                 <div className="quiz-header">
                   <span className="quiz-counter">Còn lại: {quizQueue.length} từ</span>
-                  <h2 className="quiz-question">Chọn từ tiếng Anh có nghĩa là:</h2>
+                  <h2 className="quiz-question">Từ này có nghĩa là gì?</h2>
                   <div className="quiz-meaning-highlight">
-                    "{currentQuizWord.meanings.join(', ')}"
+                    {currentQuizWord.word}
+                  </div>
+                  <div className="audio-quiz-play-btn-wrap" style={{ marginTop: 8 }}>
+                    <button 
+                      className="audio-quiz-play-btn" 
+                      onClick={() => speakWord(currentQuizWord.word)}
+                      title="Nghe phát âm"
+                    >
+                      <SpeakerWaveIcon className="icon" style={{ width: 36, height: 36 }} />
+                    </button>
+                    <p>Nhấn để nghe phát âm</p>
                   </div>
                 </div>
                 
                 <div className="quiz-options-grid">
                   {quizOptions.map((opt, idx) => {
+                    const correctMeaning = currentQuizWord.meanings.join(', ')
                     let btnClass = "quiz-option-btn"
                     if (selectedAnswer) {
-                      if (opt === currentQuizWord.word) btnClass += " correct"
+                      if (opt === correctMeaning) btnClass += " correct"
                       else if (opt === selectedAnswer) btnClass += " incorrect"
                       else btnClass += " disabled"
                     }

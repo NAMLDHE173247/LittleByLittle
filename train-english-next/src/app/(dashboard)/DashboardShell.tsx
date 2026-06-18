@@ -175,7 +175,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           closeModal, setFormData, handleSave, addExample, updateExample, removeExample,
           setDeleteTarget, handleDelete, handleDeleteSelected,
           setQuickDeckVocab, setQuickDeckIds, handleSaveQuickDeck,
-          setDetailVocab, speak, setCopied, getLevelColor, openEditModal
+          setDetailVocab, speak, setCopied, getLevelColor, openEditModal,
+          authHeaders, fetchVocabularies: globalData.fetchVocabularies
         }}
       />
     </div>

@@ -18,8 +18,10 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: <ChartBarIcon className="sb-icon" />, label: 'Thống kê', key: 'statistics' },
+  { icon: <img src="/mastery-icon.png" alt="mastery" className="sb-icon" style={{ width: 22, height: 22 }} />, label: 'Độ thông thạo', key: 'mastery' },
   { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🐝</span>, label: 'Cày thông thạo', key: 'practice' },
-  { icon: <TrophyIcon className="sb-icon" />, label: 'Độ thông thạo', key: 'mastery' },
+  { icon: <BookOpenIcon className="sb-icon" />, label: 'Từ vựng', key: 'vocabulary' },
+  { icon: <RectangleStackIcon className="sb-icon" />, label: 'Bộ thẻ', key: 'decks' },
   {
     icon: <LightBulbIcon className="sb-icon" />,
     label: 'Luyện tập đơn',
@@ -29,8 +31,6 @@ const menuItems: MenuItem[] = [
       { icon: <QuestionMarkCircleIcon className="sb-icon" />, label: 'Quiz', key: 'quiz' },
     ]
   },
-  { icon: <RectangleStackIcon className="sb-icon" />, label: 'Bộ thẻ', key: 'decks' },
-  { icon: <BookOpenIcon className="sb-icon" />, label: 'Từ vựng', key: 'vocabulary' },
   { icon: <UserGroupIcon className="sb-icon" />, label: 'Quản lý người dùng', key: 'users' },
 ]
 

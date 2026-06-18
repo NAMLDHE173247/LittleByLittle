@@ -1720,6 +1720,74 @@ body {
   border-radius: var(--radius);
 }
 
+/* Detail Image Add (when no image) */
+.detail-image-add {
+  margin-bottom: 20px;
+}
+
+.detail-image-add-btn {
+  width: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.detail-image-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.detail-image-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-image-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  transition: all 0.2s;
+}
+
+.detail-image-input::placeholder {
+  color: var(--text-muted);
+}
+
+.detail-image-preview {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  display: none;
+}
+
+.detail-image-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .detail-word-header {
   margin-bottom: 20px;
   padding-bottom: 16px;
@@ -1865,6 +1933,53 @@ body {
   margin: 0 auto;
   font-size: 14px;
   opacity: 0.4;
+}
+
+.table-thumb-empty--clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.table-thumb-empty--clickable:hover {
+  opacity: 0.8;
+  border-color: var(--accent);
+  background: var(--accent-light);
+  border-style: solid;
+}
+
+/* Inline Image URL Editor */
+.inline-image-edit {
+  position: relative;
+  min-width: 180px;
+}
+
+.inline-image-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1.5px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  transition: all 0.2s;
+}
+
+.inline-image-input::placeholder {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.inline-image-preview {
+  width: 100%;
+  max-height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  display: none;
 }
 
 /* ===================================================
