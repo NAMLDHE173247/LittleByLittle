@@ -14,7 +14,7 @@ export default function QuizRoute() {
   const { authHeaders } = useAuth();
   const { mutate } = useProgress();
 
-  const submitProgress = async (wordId: string, skill: string, isCorrect: boolean) => {
+  const submitProgress = async (wordId: string, skill: string, isCorrect: boolean, isHinted: boolean = false) => {
     try {
       const todayStr = new Date().toLocaleDateString('en-CA');
       const updatePromise = fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/progress/review`, {
@@ -23,7 +23,7 @@ export default function QuizRoute() {
           'Content-Type': 'application/json',
           ...authHeaders()
         },
-        body: JSON.stringify({ wordId, skill, correct: isCorrect, clientDateString: todayStr })
+        body: JSON.stringify({ wordId, skill, correct: isCorrect, clientDateString: todayStr, isHinted })
       });
 
       // Handle Gamification async

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import { toast } from 'sonner'
@@ -110,15 +110,34 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
   const [autoPlaySound, setAutoPlaySound] = useState(true)
 
   
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const speakTimeout = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    // preload voices
+    window.speechSynthesis.getVoices()
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.getVoices()
+    }
+  }, [])
+
   const speakWord = useCallback((text: string) => {
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-US'
-    utterance.rate = 0.9
-    const voices = window.speechSynthesis.getVoices()
-    const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('en'))
-    if (enVoice) utterance.voice = enVoice
-    window.speechSynthesis.speak(utterance)
+    if (speakTimeout.current) clearTimeout(speakTimeout.current)
+    
+    speakTimeout.current = setTimeout(() => {
+      window.speechSynthesis.cancel()
+      
+      const utterance = new SpeechSynthesisUtterance(text)
+      utteranceRef.current = utterance // Prevent Garbage Collection which causes audio cut-off
+      utterance.lang = 'en-US'
+      utterance.rate = 0.9
+      
+      const voices = window.speechSynthesis.getVoices()
+      const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('en'))
+      if (enVoice) utterance.voice = enVoice
+      
+      window.speechSynthesis.speak(utterance)
+    }, 100) // debounce 100ms
   }, [])
 
   // Step 3: Quiz Text state
@@ -254,17 +273,20 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
   }
 
   
-  // Step 5: Typing Quiz state
   const [typingQueue, setTypingQueue] = useState<any[]>([])
   const [currentTypingWord, setCurrentTypingWord] = useState<any | null>(null)
   const [typingInput, setTypingInput] = useState<string>('')
   const [typingStatus, setTypingStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle')
   const [typingCompleted, setTypingCompleted] = useState(false)
+  const [typingHintUsed, setTypingHintUsed] = useState(false)
+  const [showTypingHint, setShowTypingHint] = useState(false)
 
   const setupNextTypingWord = useCallback((wordObj: any) => {
     setCurrentTypingWord(wordObj)
     setTypingInput('')
     setTypingStatus('idle')
+    setTypingHintUsed(false)
+    setShowTypingHint(false)
     
     // Auto play sound hint
     setTimeout(() => {
@@ -292,15 +314,19 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
        fetch(`${PROGRESS_API_URL}/review`, {
          method: 'POST',
          headers: { 'Content-Type': 'application/json', ...authHeaders() },
-         body: JSON.stringify({ wordId: currentTypingWord._id, skill: 'writing', correct: isCorrect })
+         body: JSON.stringify({ wordId: currentTypingWord._id, skill: 'writing', correct: isCorrect, isHinted: typingHintUsed })
        }).catch(err => console.error(err))
+    }
+
+    if (isCorrect && typingHintUsed) {
+       toast.info("Chính xác! (Câu này không được cộng điểm vì đã dùng gợi ý 💡)")
     }
 
     setTimeout(() => {
       let newQueue = [...typingQueue]
       newQueue.shift()
 
-      if (!isCorrect && enableRepeat) {
+      if ((!isCorrect || (isCorrect && typingHintUsed)) && enableRepeat) {
         newQueue.push(currentTypingWord)
       }
 
@@ -1036,10 +1062,33 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
                   <div className="quiz-meaning-highlight">
                     "{currentTypingWord.meanings.join(', ')}"
                   </div>
-                  <button className="btn-outline btn-sm mt-3" onClick={() => speakWord(currentTypingWord.word)}>
-                    <SpeakerWaveIcon className="icon icon-inline" /> Nghe gợi ý
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
+                    <button 
+                      className={`btn-outline btn-sm ${typingHintUsed ? 'hint-active' : ''}`} 
+                      onClick={() => {
+                        setTypingHintUsed(true)
+                        setShowTypingHint(true)
+                      }}
+                    >
+                      <LightBulbIcon className="icon icon-inline" style={{ color: typingHintUsed ? '#EAB308' : undefined }} /> Gợi ý chữ
+                    </button>
+                    <button className="btn-outline btn-sm" onClick={() => {
+                      speakWord(currentTypingWord.word)
+                      setTypingHintUsed(true)
+                    }}>
+                      <SpeakerWaveIcon className="icon icon-inline" /> Nghe gợi ý
+                    </button>
+                  </div>
                 </div>
+
+                {showTypingHint && typingStatus === 'idle' && (
+                  <div className="quiz-hint-box" style={{ padding: '12px 16px', background: '#FEF9C3', color: '#854D0E', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', border: '1px solid #FEF08A' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '4px' }}>
+                      <LightBulbIcon className="icon" style={{ width: 18, height: 18 }} /> Gợi ý
+                    </div>
+                    Từ này bắt đầu bằng: <strong>{currentTypingWord.word.slice(0, 2)}...</strong>
+                  </div>
+                )}
                 
                 <form className="typing-form" onSubmit={handleTypingSubmit}>
                   <input
@@ -1104,6 +1153,9 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
                     {currentSpeakingWord.word}
                   </div>
                   <p className="step-subtitle mt-3">Nghĩa: {currentSpeakingWord.meanings.join(', ')}</p>
+                  <button className="btn-outline btn-sm mt-3" onClick={() => speakWord(currentSpeakingWord.word)} style={{ alignSelf: 'center', marginTop: '12px' }}>
+                    <SpeakerWaveIcon className="icon icon-inline" /> Nghe mẫu
+                  </button>
                 </div>
                 
                 <div className="speaking-interaction">

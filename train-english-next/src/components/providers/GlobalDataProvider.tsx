@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '@/AuthContext';
 import type { DeckItem, VocabularyItem, FormData, ProgressData } from '@/types';
 
@@ -231,21 +231,28 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     setFormError('');
   };
 
-  const speak = (text: string) => {
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speakTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const speak = useCallback((text: string) => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      const voices = window.speechSynthesis.getVoices();
-      const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
-        || voices.find(v => v.lang.startsWith('en-US'))
-        || voices.find(v => v.lang.startsWith('en'));
-      if (enVoice) utterance.voice = enVoice;
-      window.speechSynthesis.speak(utterance);
+      if (speakTimeout.current) clearTimeout(speakTimeout.current);
+      speakTimeout.current = setTimeout(() => {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utteranceRef.current = utterance; // Prevent garbage collection
+        utterance.lang = 'en-US';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        const voices = window.speechSynthesis.getVoices();
+        const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
+          || voices.find(v => v.lang.startsWith('en-US'))
+          || voices.find(v => v.lang.startsWith('en'));
+        if (enVoice) utterance.voice = enVoice;
+        window.speechSynthesis.speak(utterance);
+      }, 100); // 100ms debounce
     }
-  };
+  }, []);
 
   const getLevelColor = (level: string) => {
     const colors: Record<string, string> = {
@@ -265,6 +272,15 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       }
     }
   }, [darkMode]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  }, []);
 
   useEffect(() => {
     fetchMetadata();

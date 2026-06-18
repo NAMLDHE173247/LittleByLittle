@@ -11,7 +11,9 @@ import {
   ArrowPathIcon,
   QuestionMarkCircleIcon,
   EyeIcon,
+  LightBulbIcon,
 } from '@heroicons/react/24/outline'
+import { toast } from 'sonner'
 
 // ===== TYPES =====
 interface DeckRef {
@@ -81,7 +83,7 @@ interface QuizPageProps {
   onExit: () => void
   onEditWord: (vocab: VocabularyItem) => void
   speak: (word: string) => void
-  submitProgress?: (wordId: string, skill: string, isCorrect: boolean) => void
+  submitProgress?: (wordId: string, skill: string, isCorrect: boolean, isHinted?: boolean) => void
 }
 
 // ===== HELPERS =====
@@ -171,6 +173,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   const [fillCorrect, setFillCorrect] = useState<boolean | null>(null)
   const [wrongAnswers, setWrongAnswers] = useState<number[]>([])
   const [showReview, setShowReview] = useState(false)
+  const [hintUsed, setHintUsed] = useState(false)
+  const [showHintText, setShowHintText] = useState(false)
 
   const fillInputRef = useRef<HTMLInputElement>(null)
   const autoNextTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -286,6 +290,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setFillCorrect(null)
     setWrongAnswers([])
     setShowReview(false)
+    setHintUsed(false)
+    setShowHintText(false)
     setStarted(true)
   }, [filteredWords, settings])
 
@@ -300,6 +306,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setFillCorrect(null)
     setWrongAnswers([])
     setShowReview(false)
+    setHintUsed(false)
+    setShowHintText(false)
   }
 
   const goNext = useCallback(() => {
@@ -309,6 +317,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setAnswered(false)
     setFillInput('')
     setFillCorrect(null)
+    setHintUsed(false)
+    setShowHintText(false)
   }, [])
 
   const scheduleAutoNext = useCallback(() => {
@@ -327,15 +337,21 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     
     const isCorrect = idx === q.correctIdx
     const skill = q.type === 'listen' ? 'listening' : 'recall'
-    if (submitProgress) {
-      submitProgress(q.vocab._id, skill, isCorrect)
-    }
 
     if (isCorrect) {
-      setCorrectCount(prev => prev + 1)
+      if (hintUsed) {
+        if (submitProgress) submitProgress(q.vocab._id, skill, true, true)
+        toast.info("Chính xác! (Câu này không được cộng điểm vì đã dùng gợi ý 💡)")
+        setQuestions(prev => [...prev, q])
+      } else {
+        if (submitProgress) submitProgress(q.vocab._id, skill, true, false)
+        setCorrectCount(prev => prev + 1)
+      }
       scheduleAutoNext()
     } else {
+      if (submitProgress) submitProgress(q.vocab._id, skill, false, false)
       setWrongAnswers(prev => [...prev, currentIdx])
+      setQuestions(prev => [...prev, q])
     }
   }
 
@@ -350,8 +366,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     const q = questions[currentIdx]
     const skill = q.type === 'listen' ? 'listening' : q.type === 'fill' ? 'writing' : 'recall'
     if (submitProgress) {
-      submitProgress(q.vocab._id, skill, false)
+      submitProgress(q.vocab._id, skill, false, false)
     }
+    setQuestions(prev => [...prev, q])
   }
 
   // ---- Fill-in-blank Handler ----
@@ -375,15 +392,20 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setTotalAnswered(prev => prev + 1)
 
     const skill = 'writing'
-    if (submitProgress) {
-      submitProgress(q.vocab._id, skill, isCorrect)
-    }
-
     if (isCorrect) {
-      setCorrectCount(prev => prev + 1)
+      if (hintUsed) {
+        if (submitProgress) submitProgress(q.vocab._id, skill, true, true)
+        toast.info("Chính xác! (Câu này không được cộng điểm vì đã dùng gợi ý 💡)")
+        setQuestions(prev => [...prev, q])
+      } else {
+        if (submitProgress) submitProgress(q.vocab._id, skill, true, false)
+        setCorrectCount(prev => prev + 1)
+      }
       scheduleAutoNext()
     } else {
+      if (submitProgress) submitProgress(q.vocab._id, skill, false, false)
       setWrongAnswers(prev => [...prev, currentIdx])
+      setQuestions(prev => [...prev, q])
     }
   }
 
@@ -936,6 +958,18 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             )}
           </div>
           <div className="quiz-question-actions">
+            {!answered && (
+              <button 
+                className={`quiz-action-icon ${hintUsed ? 'hint-active' : ''}`} 
+                onClick={() => {
+                  setHintUsed(true)
+                  setShowHintText(true)
+                }} 
+                title="Sử dụng gợi ý"
+              >
+                <LightBulbIcon className="icon" style={{ color: hintUsed ? '#EAB308' : undefined }} />
+              </button>
+            )}
             {q.type !== 'listen' && (
               <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)} title="Phát âm">
                 <SpeakerWaveIcon className="icon" />
@@ -953,6 +987,22 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             </button>
           </div>
         </div>
+
+        {showHintText && !answered && (
+          <div className="quiz-hint-box" style={{ padding: '12px 16px', background: '#FEF9C3', color: '#854D0E', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', border: '1px solid #FEF08A' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '4px' }}>
+              <LightBulbIcon className="icon" style={{ width: 18, height: 18 }} /> Gợi ý
+            </div>
+            {settings.mode === 'en2vi' 
+              ? `Nghĩa của từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...` 
+              : `Từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...`}
+            {q.vocab.examples?.[0] && (
+              <div style={{ marginTop: '4px', fontStyle: 'italic', opacity: 0.9 }}>
+                Ví dụ: "{settings.mode === 'en2vi' ? q.vocab.examples[0].en : q.vocab.examples[0].vi}"
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Question Content */}
         {renderQuestion()}
