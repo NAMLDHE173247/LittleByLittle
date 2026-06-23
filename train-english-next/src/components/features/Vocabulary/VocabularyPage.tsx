@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, DocumentTextIcon, ChatBubbleLeftRightIcon,
   TagIcon, MagnifyingGlassIcon, TrashIcon, XMarkIcon, ExclamationTriangleIcon,
-  CheckIcon, SpeakerWaveIcon, PhotoIcon, PencilSquareIcon, EyeIcon
+  CheckIcon, SpeakerWaveIcon, PhotoIcon, PencilSquareIcon, EyeIcon,
+  ChevronDownIcon, CodeBracketIcon
 } from '@heroicons/react/24/outline'
 import { BookOpenIcon as BookOpenSolidIcon } from '@heroicons/react/24/solid'
 
@@ -53,21 +54,89 @@ export default function VocabularyPage({
   const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders } = actions;
 
   const [exporting, setExporting] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
   const [editingImageUrl, setEditingImageUrl] = useState<string>('');
 
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [exportMenuOpen]);
+
+  const fetchAllVocabs = async (): Promise<any[] | null> => {
+    const res = await fetch(`/api/vocabulary?limit=10000`, { headers: authHeaders() });
+    const json = await res.json();
+    if (!json.success || !json.data) {
+      alert('Không thể tải dữ liệu từ vựng!');
+      return null;
+    }
+    return json.data;
+  };
+
+  const downloadFile = (content: string, filename: string, mime: string) => {
+    const blob = new Blob(['\uFEFF' + content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Export định dạng JSON đúng chuẩn import lại được (kèm imageUrl, trống = "invalid")
+  const exportToJson = async () => {
+    setExporting(true);
+    setExportMenuOpen(false);
+    try {
+      const allVocabs = await fetchAllVocabs();
+      if (!allVocabs) return;
+
+      const payload = allVocabs.map((v: any) => ({
+        word: v.word || '',
+        type: v.type || 'word',
+        pronunciation: v.pronunciation || '',
+        meanings: Array.isArray(v.meanings) ? v.meanings : [],
+        partOfSpeech: v.partOfSpeech || '',
+        examples: Array.isArray(v.examples)
+          ? v.examples.map((ex: any) => ({ en: ex.en || '', vi: ex.vi || '' }))
+          : [],
+        topic: v.topic || '',
+        level: v.level || '',
+        synonyms: Array.isArray(v.synonyms) ? v.synonyms : [],
+        antonyms: Array.isArray(v.antonyms) ? v.antonyms : [],
+        note: v.note || '',
+        imageUrl: (v.imageUrl && v.imageUrl.trim()) ? v.imageUrl.trim() : 'invalid',
+      }));
+
+      downloadFile(
+        JSON.stringify(payload, null, 2),
+        `tu-vung-littlebylittle-${new Date().toISOString().split('T')[0]}.json`,
+        'application/json;charset=utf-8'
+      );
+    } catch (err) {
+      alert('Lỗi khi xuất dữ liệu!');
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const exportToTxt = async () => {
     setExporting(true);
+    setExportMenuOpen(false);
     try {
-      // Fetch all vocabulary without pagination
-      const res = await fetch(`/api/vocabulary?limit=10000`, { headers: authHeaders() });
-      const json = await res.json();
-      if (!json.success || !json.data) {
-        alert('Không thể tải dữ liệu từ vựng!');
-        return;
-      }
+      const allVocabs = await fetchAllVocabs();
+      if (!allVocabs) return;
 
-      const allVocabs: any[] = json.data;
       const now = new Date().toLocaleString('vi-VN');
       const separator = '═'.repeat(60);
       const thinSep = '─'.repeat(60);
@@ -117,6 +186,7 @@ export default function VocabularyPage({
         if (v.note) {
           txt += `  Ghi chú:      ${v.note}\n`;
         }
+        txt += `  Link ảnh:     ${(v.imageUrl && v.imageUrl.trim()) ? v.imageUrl.trim() : 'invalid'}\n`;
         txt += `\n`;
       });
 
@@ -124,16 +194,11 @@ export default function VocabularyPage({
       txt += `  Hết danh sách (${allVocabs.length} từ)\n`;
       txt += `${separator}\n`;
 
-      // Download file
-      const blob = new Blob(['\uFEFF' + txt], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `tu-vung-littlebylittle-${new Date().toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadFile(
+        txt,
+        `tu-vung-littlebylittle-${new Date().toISOString().split('T')[0]}.txt`,
+        'text/plain;charset=utf-8'
+      );
     } catch (err) {
       alert('Lỗi khi xuất dữ liệu!');
       console.error(err);
@@ -150,8 +215,41 @@ export default function VocabularyPage({
           <p className="page-subtitle">Quản lý bộ sưu tập từ vựng của bạn</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-outline" onClick={exportToTxt} disabled={exporting}>
-            <ArrowUpTrayIcon className="icon icon-inline" /> {exporting ? 'Đang xuất...' : 'Export TXT'}
+          <div className="export-dropdown" ref={exportMenuRef} style={{ position: 'relative' }}>
+            <button
+              className="btn-outline"
+              onClick={() => setExportMenuOpen(o => !o)}
+              disabled={exporting || (!totalFiltered && !metadata?.total)}
+            >
+              <ArrowUpTrayIcon className="icon icon-inline" /> {exporting ? 'Đang xuất...' : 'Export'}
+              <ChevronDownIcon className="icon icon-inline" style={{ width: 14, height: 14 }} />
+            </button>
+            {exportMenuOpen && (
+              <div className="export-menu">
+                <button className="export-menu-item" onClick={exportToJson}>
+                  <CodeBracketIcon className="icon icon-inline" />
+                  <div className="export-menu-text">
+                    <span className="export-menu-title">Xuất JSON</span>
+                    <span className="export-menu-desc">Import lại được, kèm link ảnh</span>
+                  </div>
+                </button>
+                <button className="export-menu-item" onClick={exportToTxt}>
+                  <DocumentTextIcon className="icon icon-inline" />
+                  <div className="export-menu-text">
+                    <span className="export-menu-title">Xuất TXT</span>
+                    <span className="export-menu-desc">Dễ đọc, kèm link ảnh</span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            className="btn-danger"
+            onClick={() => setDeleteTarget({ id: '__clear_all__', word: '' })}
+            disabled={!totalFiltered && !metadata?.total}
+            title="Xóa toàn bộ từ vựng trong cơ sở dữ liệu"
+          >
+            <TrashIcon className="icon icon-inline" /> Xóa toàn bộ
           </button>
           <button className="btn-import" onClick={() => { setShowImportModal(true); setImportResult(null); setImportError(''); setImportJsonText('') }}>
             <ArrowDownTrayIcon className="icon icon-inline" /> Import từ vựng

@@ -18,6 +18,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🔥</span>, label: 'Nhật ký', key: 'statistics' },
+  { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>📈</span>, label: 'Streak', key: 'streak' },
   { icon: <img src="/mastery-icon.png" alt="mastery" className="sb-icon" style={{ width: 22, height: 22 }} />, label: 'Độ thông thạo', key: 'mastery' },
   { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🐝</span>, label: 'Cày thông thạo', key: 'practice' },
   { icon: <BookOpenIcon className="sb-icon" />, label: 'Từ vựng', key: 'vocabulary' },

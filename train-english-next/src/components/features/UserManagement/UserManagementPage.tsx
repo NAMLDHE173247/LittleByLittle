@@ -32,8 +32,12 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+  const PASSWORD_ERROR_MSG = 'Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (@$!%*?&)'
+  const DEFAULT_PASSWORD = 'User@1234!'
+
   const [showAddModal, setShowAddModal] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', email: '', password: '123456', role: 'user', status: 'active' })
+  const [addForm, setAddForm] = useState({ name: '', email: '', password: DEFAULT_PASSWORD, role: 'user', status: 'active' })
   const [addError, setAddError] = useState('')
   const [adding, setAdding] = useState(false)
 
@@ -125,6 +129,10 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
       setAddError('Vui lòng điền đầy đủ thông tin bắt buộc')
       return
     }
+    if (!PASSWORD_REGEX.test(addForm.password)) {
+      setAddError(PASSWORD_ERROR_MSG)
+      return
+    }
     setAddError('')
     setAdding(true)
     try {
@@ -136,7 +144,7 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
       const json = await res.json()
       if (json.success) {
         setShowAddModal(false)
-        setAddForm({ name: '', email: '', password: '123456', role: 'user', status: 'active' })
+        setAddForm({ name: '', email: '', password: DEFAULT_PASSWORD, role: 'user', status: 'active' })
         fetchUsers()
       } else {
         setAddError(json.message)
@@ -152,6 +160,10 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
     e.preventDefault()
     if (!editForm.name.trim() || !editForm.email.trim()) {
       setEditError('Vui lòng điền đầy đủ thông tin bắt buộc')
+      return
+    }
+    if (editForm.password.trim() && !PASSWORD_REGEX.test(editForm.password)) {
+      setEditError(PASSWORD_ERROR_MSG)
       return
     }
     setEditError('')
@@ -387,7 +399,7 @@ export default function UserManagementPage({ darkMode }: { darkMode: boolean }) 
                 <div className="form-group">
                   <label>Mật khẩu <span className="required">*</span></label>
                   <input type="text" value={addForm.password} onChange={e => setAddForm({ ...addForm, password: e.target.value })} placeholder="Mật khẩu" />
-                  <small style={{ color: 'var(--text-secondary)' }}>Mặc định là 123456, bạn có thể nhập mật khẩu khác nếu muốn.</small>
+                  <small style={{ color: 'var(--text-secondary)' }}>Mặc định là User@1234! — phải có chữ hoa, thường, số và ký tự đặc biệt.</small>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div className="form-group">

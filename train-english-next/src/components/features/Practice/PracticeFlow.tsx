@@ -78,27 +78,69 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
     toast.success('Đã lưu thiết lập luyện tập mặc định! 💖')
   }
 
-  const applyPreset = (type: 'new' | 'learning' | 'review') => {
+  const applyPreset = (type: 'new' | 'learning' | 'review' | 'maintain' | 'recovery', opts?: { silent?: boolean }) => {
     if (type === 'new') {
       setSourceMode('oldest') // Học từ mới thì nên lấy từ cũ nhất (thêm lâu nhất) nhưng chưa học
       setFilterTier('not_started')
       setWordCount(4)
       setSelectedSteps({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: true })
-      toast.success('Đã áp dụng: Chế độ Học từ mới ✨')
+      if (!opts?.silent) toast.success('Đã áp dụng: Chế độ Học từ mới ✨')
     } else if (type === 'learning') {
       setSourceMode('lowest_score')
       setFilterTier('learning')
       setWordCount(8)
       setSelectedSteps({ 1: true, 2: false, 3: true, 4: true, 5: true, 6: true })
-      toast.success('Đã áp dụng: Chế độ Rèn từ đang học 💪')
+      if (!opts?.silent) toast.success('Đã áp dụng: Chế độ Rèn từ đang học 💪')
     } else if (type === 'review') {
       setSourceMode('overdue')
       setFilterTier('all')
       setWordCount(12)
       setSelectedSteps({ 1: false, 2: false, 3: true, 4: true, 5: true, 6: true })
-      toast.success('Đã áp dụng: Chế độ Ôn từ cũ 🔄')
+      if (!opts?.silent) toast.success('Đã áp dụng: Chế độ Ôn từ cũ 🔄')
+    } else if (type === 'maintain' || type === 'recovery') {
+      // Smart: ưu tiên từ quá hạn, bổ sung từ điểm thấp (không chỉ lấy overdue)
+      setSourceMode('smart')
+      setFilterTier('all')
+      setWordCount(type === 'maintain' ? 10 : 12)
+      setSelectedSteps({ 1: false, 2: false, 3: true, 4: true, 5: true, 6: true })
+      if (!opts?.silent) {
+        toast.success(type === 'maintain' ? 'Đã áp dụng: Giữ phong độ 📈' : 'Đã áp dụng: Trả nợ / Cắt lỗ 🆘')
+      }
     }
   }
+
+  // Auto-fill từ Smart Shortcuts trên Dashboard Streak (?preset=...&count=...&src=streak)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const preset = params.get('preset')
+    const count = params.get('count')
+    const src = params.get('src')
+
+    let applied = false
+    if (
+      preset === 'new' || preset === 'learning' || preset === 'review'
+      || preset === 'maintain' || preset === 'recovery'
+    ) {
+      applyPreset(preset as 'new' | 'learning' | 'review' | 'maintain' | 'recovery', { silent: true })
+      applied = true
+    }
+    if (count) {
+      const n = parseInt(count)
+      if (n > 0 && n <= 100) {
+        setCustomWordCount(String(n))
+        applied = true
+      }
+    }
+
+    if (applied && src === 'streak') {
+      toast.success('Đã nạp gợi ý từ Streak — kiểm tra rồi bấm Bắt đầu nhé! 🎯')
+    }
+
+    // Dọn query khỏi URL để không bị áp lại khi refresh / quay lại
+    if (applied) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   // Data
   const [words, setWords] = useState<any[]>([])
@@ -435,9 +477,16 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
     .map(([key, _]) => parseInt(key))
     .sort()
 
+  const NEW_WORD_LIMIT = 4
   const startPractice = async () => {
-    const finalCount = customWordCount ? parseInt(customWordCount) : wordCount
+    let finalCount = customWordCount ? parseInt(customWordCount) : wordCount
     if (!finalCount || finalCount < 1) return
+
+    // Học từ mới: giới hạn tối đa 5 từ/lần để không quá tải
+    if (filterTier === 'not_started' && finalCount > NEW_WORD_LIMIT) {
+      finalCount = NEW_WORD_LIMIT
+      toast.info(`Học từ mới chỉ nên ${NEW_WORD_LIMIT} từ mỗi lần để não kịp ghi nhớ 🧠`)
+    }
 
     setLoading(true)
     try {
@@ -450,6 +499,9 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
       const res = await fetch(url.toString(), { headers: authHeaders() })
       const json = await res.json()
       if (json.success && json.data.length > 0) {
+        if (json.data.length < finalCount) {
+          toast.info(`Kho chỉ còn ${json.data.length} từ phù hợp — đã load hết số từ có thể luyện.`)
+        }
         setWords(json.data)
         setCurrentWordIndex(0)
         setIsCardExpanded(false)

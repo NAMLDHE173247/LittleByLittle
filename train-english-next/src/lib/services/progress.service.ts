@@ -311,10 +311,19 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
     }
     if (mode === "overdue") {
       wordScores = wordScores.filter(w => w.isDecaying);
+    } else if (mode === "smart") {
+      // Giữ phong độ / Trả nợ: ưu tiên từ quá hạn, bổ sung từ điểm thấp (không lấy từ chưa học)
+      wordScores = wordScores.filter(w => w.tier !== "not_started");
     }
 
     // 5. Sort based on mode
-    if (mode === "lowest_score") {
+    if (mode === "smart") {
+      wordScores.sort((a, b) => {
+        if (a.isDecaying !== b.isDecaying) return a.isDecaying ? -1 : 1;
+        if (a.overall !== b.overall) return a.overall - b.overall;
+        return Math.random() - 0.5;
+      });
+    } else if (mode === "lowest_score") {
       wordScores.sort((a, b) => {
         if (a.overall !== b.overall) return a.overall - b.overall;
         return Math.random() - 0.5;
@@ -345,6 +354,68 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
     return {
       success: true,
       data: selected,
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+// ================================================================
+// GET /api/progress/practice-availability — Đếm số từ khả dụng theo từng pool
+// (dùng cho Smart Shortcuts ở trang Streak để cap số lượng không vượt kho)
+// ================================================================
+export const getPracticeAvailability = async (payload: { deckId?: string }, userId: string) => {
+  await dbConnect();
+  try {
+    const deckId = payload.deckId as string;
+
+    const vocabQuery: any = {};
+    if (deckId) vocabQuery.deckIds = deckId;
+    const allVocabs = await Vocabulary.find(vocabQuery).lean();
+
+    const progresses = await UserWordProgress.find({ userId }).lean();
+    const progressMap = new Map(progresses.map((p) => [p.wordId.toString(), p]));
+    const now = new Date();
+
+    let due = 0;
+    let notStarted = 0;
+    let learning = 0;
+
+    for (const vocab of allVocabs) {
+      const progress = progressMap.get(vocab._id.toString());
+      if (!progress) {
+        notStarted++;
+        continue;
+      }
+      const recall = getDecayedSkillPoints(progress.skills.recall, now);
+      const listening = getDecayedSkillPoints(progress.skills.listening, now);
+      const writing = getDecayedSkillPoints(progress.skills.writing, now);
+      const pronunciation = getDecayedSkillPoints(progress.skills.pronunciation, now);
+      const overall = Math.round((recall + listening + writing + pronunciation) / 4);
+
+      if (overall === 0) {
+        notStarted++;
+      } else if (overall < 40) {
+        learning++;
+      }
+
+      const isDecaying =
+        (new Date(progress.skills.recall?.nextReview) <= now && recall > 0) ||
+        (new Date(progress.skills.listening?.nextReview) <= now && listening > 0) ||
+        (new Date(progress.skills.writing.nextReview) <= now && writing > 0) ||
+        (new Date(progress.skills.pronunciation.nextReview) <= now && pronunciation > 0);
+      if (isDecaying) due++;
+    }
+
+    return {
+      success: true,
+      data: {
+        total: allVocabs.length,
+        due,
+        notStarted,
+        learning,
+        started: allVocabs.length - notStarted,
+      },
     };
   } catch (error) {
     throw error;

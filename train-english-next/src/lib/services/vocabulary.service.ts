@@ -92,6 +92,12 @@ export class VocabularyService {
     return result.deletedCount;
   }
 
+  static async deleteAll() {
+    await dbConnect();
+    const result = await Vocabulary.deleteMany({});
+    return result.deletedCount;
+  }
+
   static async bulkImport(words: any[]) {
     await dbConnect();
     if (!words || words.length === 0) throw new Error("Mảng từ vựng rỗng");
@@ -142,7 +148,10 @@ export class VocabularyService {
         synonyms: Array.isArray(item.synonyms) ? item.synonyms.map((s: any) => String(s).trim()).filter(Boolean) : [],
         antonyms: Array.isArray(item.antonyms) ? item.antonyms.map((a: any) => String(a).trim()).filter(Boolean) : [],
         note: item.note?.trim?.() || '',
-        imageUrl: item.imageUrl?.trim?.() || '',
+        imageUrl: (() => {
+          const url = item.imageUrl?.trim?.() || '';
+          return url.toLowerCase() === 'invalid' ? '' : url;
+        })(),
         audioUrl: item.audioUrl?.trim?.() || '',
         deckIds: Array.isArray(item.deckIds) ? item.deckIds : [],
       };

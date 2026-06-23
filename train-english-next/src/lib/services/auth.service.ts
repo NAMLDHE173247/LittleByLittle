@@ -2,6 +2,10 @@ import { User } from "../db/models";
 import jwt from "jsonwebtoken";
 import dbConnect from "../db/connection";
 
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+const PASSWORD_ERROR_MSG =
+  "Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (@$!%*?&)";
+
 export class AuthService {
   static generateToken(user: { _id: string; email: string; role: string }): string {
     const secret = process.env.JWT_SECRET;
@@ -25,8 +29,8 @@ export class AuthService {
     if (typeof email !== "string" || typeof password !== "string" || typeof name !== "string") {
       throw new Error("Dữ liệu đầu vào không hợp lệ");
     }
-    if (password.length < 6) {
-      throw new Error("Mật khẩu phải có ít nhất 6 ký tự");
+    if (!PASSWORD_REGEX.test(password)) {
+      throw new Error(PASSWORD_ERROR_MSG);
     }
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -95,8 +99,8 @@ export class AuthService {
     if (!currentPassword || !newPassword) {
       throw new Error("Vui lòng nhập mật khẩu hiện tại và mật khẩu mới");
     }
-    if (newPassword.length < 6) {
-      throw new Error("Mật khẩu mới phải có ít nhất 6 ký tự");
+    if (!PASSWORD_REGEX.test(newPassword)) {
+      throw new Error(PASSWORD_ERROR_MSG);
     }
 
     const user = await User.findById(userId).select("+password");

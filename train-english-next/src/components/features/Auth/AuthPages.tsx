@@ -134,8 +134,9 @@ export function RegisterPage({ darkMode, onBack }: RegisterPageProps) {
       return
     }
 
-    if (password.length < 6) {
-      setError('Mật khẩu phải có ít nhất 6 ký tự')
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+    if (!passwordRegex.test(password)) {
+      setError('Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (@$!%*?&)')
       return
     }
 
@@ -215,7 +216,7 @@ export function RegisterPage({ darkMode, onBack }: RegisterPageProps) {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Ít nhất 6 ký tự"
+                placeholder="Ít nhất 8 ký tự, gồm hoa, thường, số, ký tự đặc biệt"
                 autoComplete="new-password"
               />
             </div>

@@ -24,7 +24,7 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
   const {
     setShowImportModal, setImportJsonText, setImportError, setImportResult, setImportCopied, handleImport,
     closeModal, setFormData, handleSave, addExample, updateExample, removeExample,
-    setDeleteTarget, handleDelete, handleDeleteSelected,
+    setDeleteTarget, handleDelete, handleDeleteSelected, handleClearAll,
     setQuickDeckVocab, setQuickDeckIds, handleSaveQuickDeck,
     setDetailVocab, speak, setCopied, getLevelColor, openEditModal,
     authHeaders, fetchVocabularies
@@ -35,30 +35,76 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
   const [isEditingDetailImage, setIsEditingDetailImage] = useState(false);
   const [savingDetailImage, setSavingDetailImage] = useState(false);
 
+  // Import mode: 'basic' (không ảnh) | 'full' (kèm imageUrl)
+  const [importMode, setImportMode] = useState<'basic' | 'full'>('basic');
+
+  const IMPORT_PROMPT_BASIC = `Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng tiếng Anh quan trọng và trả về theo định dạng JSON array chuẩn. Chủ đề là "[CHỦ ĐỀ]", trình độ là "[B1/B2/...]". Bạn chỉ trả về mảng JSON, không giải thích gì thêm:\n\n[NỘI DUNG CỦA BẠN Ở ĐÀY]\n\nĐịnh dạng JSON mỗi từ:\n[\n  {\n    "word": "từ vựng",\n    "type": "word",\n    "pronunciation": "/phiên âm IPA/",\n    "meanings": ["nghĩa tiếng Việt 1", "nghĩa tiếng Việt 2"],\n    "partOfSpeech": "noun/verb/adjective/adverb",\n    "examples": [{ "en": "câu ví dụ tiếng Anh", "vi": "dịch nghĩa tiếng Việt" }],\n    "topic": "[CHỦ ĐỀ]",\n    "level": "B1",\n    "synonyms": ["từ đồng nghĩa"],\n    "antonyms": ["từ trái nghĩa"],\n    "note": "ghi chú hoặc mẹo nhớ"\n  }\n]`;
+
+  const IMPORT_PROMPT_FULL = `Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng tiếng Anh quan trọng và trả về theo định dạng JSON array chuẩn. Chủ đề là "[CHỦ ĐỀ]", trình độ là "[B1/B2/...]". Với mỗi từ, hãy thêm trường "imageUrl" là một đường dẫn ảnh minh họa hợp lệ (URL công khai trực tiếp tới file ảnh .jpg/.png). Bạn chỉ trả về mảng JSON, không giải thích gì thêm:\n\n[NỘI DUNG CỦA BẠN Ở ĐÀY]\n\nĐịnh dạng JSON mỗi từ:\n[\n  {\n    "word": "từ vựng",\n    "type": "word",\n    "pronunciation": "/phiên âm IPA/",\n    "meanings": ["nghĩa tiếng Việt 1", "nghĩa tiếng Việt 2"],\n    "partOfSpeech": "noun/verb/adjective/adverb",\n    "examples": [{ "en": "câu ví dụ tiếng Anh", "vi": "dịch nghĩa tiếng Việt" }],\n    "topic": "[CHỦ ĐỀ]",\n    "level": "B1",\n    "synonyms": ["từ đồng nghĩa"],\n    "antonyms": ["từ trái nghĩa"],\n    "note": "ghi chú hoặc mẹo nhớ",\n    "imageUrl": "https://.../anh-minh-hoa.jpg"\n  }\n]`;
+
+  const activePrompt = importMode === 'full' ? IMPORT_PROMPT_FULL : IMPORT_PROMPT_BASIC;
+
+  const basicPlaceholder = `[\n  {\n    "word": "example",\n    "meanings": ["ví dụ"],\n    ...\n  }\n]`;
+  const fullPlaceholder = `[\n  {\n    "word": "example",\n    "meanings": ["ví dụ"],\n    "imageUrl": "https://.../anh.jpg",\n    ...\n  }\n]`;
+
+  const closeImportModal = () => {
+    setShowImportModal(false);
+    setImportMode('basic');
+  };
+
   return (
     <>
       {/* ===== IMPORT MODAL ===== */}
       {showImportModal && (
-        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+        <div className="modal-overlay" onClick={closeImportModal}>
           <div className="modal import-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2><ArrowDownTrayIcon className="icon icon-inline" /> Import từ vựng qua AI</h2>
-              <button className="modal-close" onClick={() => setShowImportModal(false)}><XMarkIcon className="icon" /></button>
+              <button className="modal-close" onClick={closeImportModal}><XMarkIcon className="icon" /></button>
+            </div>
+
+            <div className="import-mode-bar">
+              <div className="import-tabs">
+                <button
+                  type="button"
+                  className={`import-tab ${importMode === 'basic' ? 'active' : ''}`}
+                  onClick={() => setImportMode('basic')}
+                >
+                  Import cơ bản
+                  <span className="import-tab-tooltip">
+                    Chỉ import thông tin chữ (nghĩa, phát âm, ví dụ, ghi chú...). Phù hợp khi dán nhanh kết quả từ AI mà không cần ảnh.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`import-tab ${importMode === 'full' ? 'active' : ''}`}
+                  onClick={() => setImportMode('full')}
+                >
+                  Import đầy đủ (kèm ảnh)
+                  <span className="import-tab-tooltip">
+                    Import từ vựng kèm đường dẫn ảnh minh họa (imageUrl). Phù hợp khi muốn mỗi từ có hình ảnh trực quan.
+                  </span>
+                </button>
+              </div>
+              <div className="import-mode-hint">
+                {importMode === 'full'
+                  ? 'Chế độ đầy đủ: mỗi từ sẽ có thêm trường "imageUrl" chứa link ảnh minh họa.'
+                  : 'Chế độ cơ bản: import nhanh, không bao gồm ảnh minh họa. Hover tab để xem hướng dẫn.'}
+              </div>
             </div>
 
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Step 1: Prompt Template */}
               <div className="import-step">
                 <div className="import-step-header">
                   <span className="import-step-number">1</span>
                   <span className="import-step-title">Copy câu lệnh mẫu gửi cho AI (ChatGPT / Claude / Gemini)</span>
                 </div>
                 <div className="import-prompt-box">
-                  <pre className="import-prompt-text">{`Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng tiếng Anh quan trọng và trả về theo định dạng JSON array chuẩn. Chủ đề là "[CHỦ ĐỀ]", trình độ là "[B1/B2/...]". Bạn chỉ trả về mảng JSON, không giải thích gì thêm:\n\n[NỘI DUNG CỦA BẠN Ở ĐÀY]\n\nĐịnh dạng JSON mỗi từ:\n[\n  {\n    "word": "từ vựng",\n    "type": "word",\n    "pronunciation": "/phiên âm IPA/",\n    "meanings": ["nghĩa tiếng Việt 1", "nghĩa tiếng Việt 2"],\n    "partOfSpeech": "noun/verb/adjective/adverb",\n    "examples": [{ "en": "câu ví dụ tiếng Anh", "vi": "dịch nghĩa tiếng Việt" }],\n    "topic": "[CHỦ ĐỀ]",\n    "level": "B1",\n    "synonyms": ["từ đồng nghĩa"],\n    "antonyms": ["từ trái nghĩa"],\n    "note": "ghi chú hoặc mẹo nhớ"\n  }\n]`}</pre>
+                  <pre className="import-prompt-text">{activePrompt}</pre>
                   <button
                     className={`btn-copy-prompt ${importCopied ? 'copied' : ''}`}
                     onClick={() => {
-                      navigator.clipboard.writeText(`Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng tiếng Anh quan trọng và trả về theo định dạng JSON array chuẩn. Chủ đề là "[CHỦ ĐỀ]", trình độ là "[B1/B2/...]". Bạn chỉ trả về mảng JSON, không giải thích gì thêm:\n\n[NỘI DUNG CỦA BẠN Ở ĐÀY]\n\nĐịnh dạng JSON mỗi từ:\n[\n  {\n    "word": "từ vựng",\n    "type": "word",\n    "pronunciation": "/phiên âm IPA/",\n    "meanings": ["nghĩa tiếng Việt 1", "nghĩa tiếng Việt 2"],\n    "partOfSpeech": "noun/verb/adjective/adverb",\n    "examples": [{ "en": "câu ví dụ tiếng Anh", "vi": "dịch nghĩa tiếng Việt" }],\n    "topic": "[CHỦ ĐỀ]",\n    "level": "B1",\n    "synonyms": ["từ đồng nghĩa"],\n    "antonyms": ["từ trái nghĩa"],\n    "note": "ghi chú hoặc mẹo nhớ"\n  }\n]`)
+                      navigator.clipboard.writeText(activePrompt)
                       setImportCopied(true)
                       setTimeout(() => setImportCopied(false), 2500)
                     }}
@@ -79,7 +125,7 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
                 </div>
                 <textarea
                   className="import-textarea"
-                  placeholder={`[\n  {\n    "word": "example",\n    "meanings": ["ví dụ"],\n    ...\n  }\n]`}
+                  placeholder={importMode === 'full' ? fullPlaceholder : basicPlaceholder}
                   value={importJsonText}
                   onChange={e => { setImportJsonText(e.target.value); setImportError(''); setImportResult(null) }}
                   rows={10}
@@ -130,7 +176,7 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
             </div>
 
             <div className="modal-footer">
-              <button className="btn-outline" onClick={() => setShowImportModal(false)}>Đóng</button>
+              <button className="btn-outline" onClick={closeImportModal}>Đóng</button>
               <button className="btn-primary" onClick={handleImport} disabled={isImporting || !importJsonText.trim()}>
                 {isImporting ? <><span className="spinner-sm"></span> Đang import...</> : <><ArrowDownTrayIcon className="icon icon-inline" /> Import Dữ Liệu</>}
               </button>
@@ -354,20 +400,34 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
               <button className="modal-close" onClick={() => setDeleteTarget(null)}><XMarkIcon className="icon" /></button>
             </div>
             <div className="modal-body">
-              <p className="delete-msg">
-                Bạn có chắc muốn xóa{' '}
-                <strong>{deleteTarget.word}</strong>?
-                Hành động này không thể hoàn tác.
-              </p>
+              {deleteTarget.id === '__clear_all__' ? (
+                <p className="delete-msg">
+                  Bạn có chắc muốn xóa{' '}
+                  <strong>TOÀN BỘ từ vựng</strong> trong cơ sở dữ liệu?
+                  Toàn bộ dữ liệu sẽ bị xóa vĩnh viễn và <strong>không thể hoàn tác</strong>.
+                </p>
+              ) : (
+                <p className="delete-msg">
+                  Bạn có chắc muốn xóa{' '}
+                  <strong>{deleteTarget.word}</strong>?
+                  Hành động này không thể hoàn tác.
+                </p>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn-outline" onClick={() => setDeleteTarget(null)}>Hủy</button>
               <button
                 className="btn-danger"
-                onClick={deleteTarget.id === '__bulk__' ? handleDeleteSelected : handleDelete}
+                onClick={
+                  deleteTarget.id === '__clear_all__'
+                    ? handleClearAll
+                    : deleteTarget.id === '__bulk__'
+                      ? handleDeleteSelected
+                      : handleDelete
+                }
                 disabled={deleting}
               >
-                {deleting ? 'Đang xóa...' : 'Xóa'}
+                {deleting ? 'Đang xóa...' : deleteTarget.id === '__clear_all__' ? 'Xóa toàn bộ' : 'Xóa'}
               </button>
             </div>
           </div>

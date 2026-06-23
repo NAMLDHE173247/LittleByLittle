@@ -1,1 +1,16 @@
 /* Statistics styles will go here */
+
+/* Streak bar chart — hiệu ứng cột mọc lên từ đáy */
+@keyframes streakBarGrow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.streak-bar {
+  transform-origin: bottom center;
+  animation: streakBarGrow 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

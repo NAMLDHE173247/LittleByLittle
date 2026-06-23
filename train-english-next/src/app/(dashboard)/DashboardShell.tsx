@@ -115,6 +115,31 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleClearAll = async () => {
+    try {
+      globalData.setDeleting(true);
+      const res = await fetch('/api/vocabulary/clear-all', {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      const result = await res.json();
+      if (result.success) {
+        globalData.setDeleteTarget(null);
+        globalData.setSelectedRows([]);
+        globalData.setIsSelectionMode(false);
+        globalData.setCurrentPage(1);
+        globalData.fetchVocabularies();
+        globalData.fetchMetadata();
+      } else {
+        alert(result.message || 'Xóa toàn bộ thất bại');
+      }
+    } catch (e) {
+      alert('Lỗi kết nối');
+    } finally {
+      globalData.setDeleting(false);
+    }
+  };
+
   const handleSaveQuickDeck = async () => {
     if (!globalData.quickDeckVocab) return;
     try {
@@ -173,7 +198,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         modalsActions={{
           setShowImportModal, setImportJsonText, setImportError, setImportResult, setImportCopied, handleImport,
           closeModal, setFormData, handleSave, addExample, updateExample, removeExample,
-          setDeleteTarget, handleDelete, handleDeleteSelected,
+          setDeleteTarget, handleDelete, handleDeleteSelected, handleClearAll,
           setQuickDeckVocab, setQuickDeckIds, handleSaveQuickDeck,
           setDetailVocab, speak, setCopied, getLevelColor, openEditModal,
           authHeaders, fetchVocabularies: globalData.fetchVocabularies
