@@ -614,9 +614,9 @@ export default function VocabularyPage({
                         <td className="col-decks">
                           {vocab.deckIds && vocab.deckIds.length > 0 ? (
                             <div className="deck-badges">
-                              {vocab.deckIds.map((d: any) => (
+                              {vocab.deckIds.map((d: any, i: number) => (
                                 <span
-                                  key={d._id}
+                                  key={d._id || i}
                                   className="badge badge-deck"
                                   style={{ backgroundColor: d.color + '20', color: d.color, borderColor: d.color + '40' }}
                                 >

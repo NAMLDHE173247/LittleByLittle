@@ -78,7 +78,7 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
     toast.success('Đã lưu thiết lập luyện tập mặc định! 💖')
   }
 
-  const applyPreset = (type: 'new' | 'learning' | 'review' | 'maintain' | 'recovery', opts?: { silent?: boolean }) => {
+  const applyPreset = (type: 'new' | 'learning' | 'review' | 'maintain' | 'recovery' | 'enw', opts?: { silent?: boolean }) => {
     if (type === 'new') {
       setSourceMode('oldest') // Học từ mới thì nên lấy từ cũ nhất (thêm lâu nhất) nhưng chưa học
       setFilterTier('not_started')
@@ -106,6 +106,15 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
       if (!opts?.silent) {
         toast.success(type === 'maintain' ? 'Đã áp dụng: Giữ phong độ 📈' : 'Đã áp dụng: Trả nợ / Cắt lỗ 🆘')
       }
+    } else if (type === 'enw') {
+      // ENW: Flashcard → Trắc nghiệm nghĩa → Gõ từ tiếng Anh
+      setSourceMode('lowest_score')
+      setFilterTier('all')
+      setWordCount(8)
+      setSelectedSteps({ 1: true, 2: false, 3: true, 4: false, 5: true, 6: false })
+      setEnablePoints(true)
+      setEnableRepeat(true)
+      if (!opts?.silent) toast.success('Đã áp dụng: Chế độ ENW — English Writing 🖊️')
     }
   }
 
@@ -119,9 +128,9 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
     let applied = false
     if (
       preset === 'new' || preset === 'learning' || preset === 'review'
-      || preset === 'maintain' || preset === 'recovery'
+      || preset === 'maintain' || preset === 'recovery' || preset === 'enw'
     ) {
-      applyPreset(preset as 'new' | 'learning' | 'review' | 'maintain' | 'recovery', { silent: true })
+      applyPreset(preset as 'new' | 'learning' | 'review' | 'maintain' | 'recovery' | 'enw', { silent: true })
       applied = true
     }
     if (count) {
@@ -633,6 +642,7 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
               <button className="btn-outline" onClick={() => applyPreset('new')} style={{ borderColor: '#3b82f6', color: '#3b82f6', background: 'rgba(59,130,246,0.05)' }}>✨ Học từ mới</button>
               <button className="btn-outline" onClick={() => applyPreset('learning')} style={{ borderColor: '#f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.05)' }}>💪 Rèn từ đang học</button>
               <button className="btn-outline" onClick={() => applyPreset('review')} style={{ borderColor: '#10b981', color: '#10b981', background: 'rgba(16,185,129,0.05)' }}>🔄 Ôn từ quên lãng</button>
+              <button className="btn-outline" onClick={() => applyPreset('enw')} style={{ borderColor: '#8b5cf6', color: '#8b5cf6', background: 'rgba(139,92,246,0.05)' }}>🖊️ ENW</button>
             </div>
 
             <div className="setup-grid wide-grid">
