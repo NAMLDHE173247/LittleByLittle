@@ -39,6 +39,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${plusJakarta.variable} ${lora.variable} ${notoSans.variable} h-full antialiased font-sans`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans">
         <AuthProvider>{children}</AuthProvider>
