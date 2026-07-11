@@ -10,13 +10,17 @@ import {
   SpeakerWaveIcon,
   LightBulbIcon,
   ArrowPathIcon,
+  XMarkIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/AuthContext'
 import './WritingMode.css'
 
 // ===== TYPES =====
 interface VocabItem {
-  _id: string
+  _id?: string
+  id?: string
+  wordId?: string
   word: string
   pronunciation?: string
   meanings: string[]
@@ -28,10 +32,17 @@ interface VocabItem {
 
 type WordStage = 'type' | 'choice' | 'flashcard' | 'type_retry'
 
+type TypingPhase =
+  | 'answering'      // nhập bình thường
+  | 'feedback_ok'    // vừa đúng, đang hiện toast/animation
+  | 'feedback_fail'  // vừa sai, hiện đáp án đúng
+  | 'correcting'     // bắt gõ lại đáp án đúng
+  | 'done'           // từ hoàn tất, đang advance
+
 interface WordState {
   vocab: VocabItem
   stage: WordStage
-  hintUsed: boolean
+  hintLevel: number    // 0–4
 }
 
 interface WritingModeProps {
@@ -42,6 +53,7 @@ interface WritingModeProps {
 const BASE_URL = ''
 const PROGRESS_API_URL = `${BASE_URL}/api/progress`
 
+// ===== HELPERS =====
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -51,6 +63,105 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a
 }
 
+function getWordId(vocab: VocabItem): string {
+  return vocab._id ?? vocab.id ?? vocab.wordId ?? ''
+}
+
+/** Dùng để SO SÁNH — không hiển thị */
+function normalizeForComparison(s: string): string {
+  return s
+    .normalize('NFKC')                    // Unicode chuẩn hóa trước
+    .trim()
+    .toLowerCase()
+    .replace(/[''‛]/g, "'")              // smart single quote → thẳng
+    .replace(/[""„‟]/g, '"')            // smart double quote → thẳng
+    .replace(/\s+/g, ' ')               // nhiều khoảng trắng → 1
+}
+
+/** Dùng để HIỂN THỊ — giữ nguyên format gốc */
+function formatForDisplay(s: string): string {
+  return s.trim()
+}
+
+function levenshtein(a: string, b: string): number {
+  const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null))
+  for (let i = 0; i <= a.length; i++) matrix[0][i] = i
+  for (let j = 0; j <= b.length; j++) matrix[j][0] = j
+  for (let j = 1; j <= b.length; j++) {
+    for (let i = 1; i <= a.length; i++) {
+      const indicator = a[i - 1] === b[j - 1] ? 0 : 1
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1, // insertion
+        matrix[j - 1][i] + 1, // deletion
+        matrix[j - 1][i - 1] + indicator // substitution
+      )
+    }
+  }
+  return matrix[b.length][a.length]
+}
+
+function getValidAnswers(vocab: VocabItem): string[] {
+  return [vocab.word]
+}
+
+function checkAnswer(input: string, vocab: VocabItem): {
+  isCorrect: boolean
+  isNearMiss: boolean
+  nearMissTarget?: string
+} {
+  const normInput = normalizeForComparison(input)
+  const validAnswers = getValidAnswers(vocab).map(normalizeForComparison)
+
+  if (validAnswers.includes(normInput)) {
+    return { isCorrect: true, isNearMiss: false }
+  }
+
+  const minDist = Math.min(...validAnswers.map(a => levenshtein(normInput, a)))
+  const shortestValidLen = Math.min(...validAnswers.map(a => a.length))
+  const isNearMiss = shortestValidLen >= 4 && minDist === 1
+
+  return {
+    isCorrect: false,
+    isNearMiss,
+    nearMissTarget: isNearMiss ? getValidAnswers(vocab)[0] : undefined
+  }
+}
+
+function buildHintDisplay(word: string, hintLevel: number): string {
+  const chars = word.split('')
+  const letterIndices = chars
+    .map((c, i) => /[a-zA-Z]/.test(c) ? i : -1)
+    .filter(i => i !== -1)
+
+  if (hintLevel <= 1) return ''
+
+  if (hintLevel === 2) {
+    return chars.map(c => /[a-zA-Z]/.test(c) ? '_' : c).join('')
+  }
+
+  const revealCount = hintLevel === 3 ? 1 : 3
+
+  return chars.map((c, i) => {
+    if (!/[a-zA-Z]/.test(c)) return c 
+    const letterPos = letterIndices.indexOf(i)
+    return letterPos < revealCount ? c : '_'
+  }).join(hintLevel === 2 ? ' ' : '') // only separate words properly, not each letter if not level 2
+}
+
+function requeue(queue: WordState[], current: WordState): WordState[] {
+  const rest = queue.slice(1)
+  const wordId = getWordId(current.vocab)
+  const deduped = rest.filter(w => getWordId(w.vocab) !== wordId)
+  const reinsert: WordState = { ...current, stage: 'type', hintLevel: 0 }
+  const insertAt = Math.min(2, deduped.length)
+  return [
+    ...deduped.slice(0, insertAt),
+    reinsert,
+    ...deduped.slice(insertAt),
+  ]
+}
+
+// ===== MAIN COMPONENT =====
 export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
   const { authHeaders } = useAuth()
 
@@ -61,6 +172,7 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
   const [customWordCount, setCustomWordCount] = useState('')
   const [sourceMode, setSourceMode] = useState('lowest_score')
   const [filterDeck, setFilterDeck] = useState('')
+  const [enableRepeat, setEnableRepeat] = useState(true)
 
   // ── Practice state ──
   const [allWords, setAllWords] = useState<VocabItem[]>([])
@@ -68,24 +180,43 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
   const [passedIds, setPassedIds] = useState<Set<string>>(new Set())
   const [totalWords, setTotalWords] = useState(0)
 
-  // ── Current card state ──
+  // ── Session state ──
+  const [wrongAttemptsByWord, setWrongAttemptsByWord] = useState<Record<string, number>>({})
+  const [failedWords, setFailedWords] = useState<VocabItem[]>([])
+  const [firstAttemptByWord, setFirstAttemptByWord] = useState<Record<string, boolean>>({})
+  
+  // ── UI state ──
+  const [typingPhase, setTypingPhase] = useState<TypingPhase>('answering')
   const [typingInput, setTypingInput] = useState('')
-  const [typingStatus, setTypingStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle')
-  const [showHint, setShowHint] = useState(false)
-  const [hintUsedCurrentCard, setHintUsedCurrentCard] = useState(false)
+  const [retypeInput, setRetypeInput] = useState('')
+  const [nearMissMsg, setNearMissMsg] = useState('')
 
-  // ── Choice state ──
+  // ── Choice state (Phase B - pending rewrite, keep minimal for now) ──
   const [choiceOptions, setChoiceOptions] = useState<string[]>([])
   const [choiceSelected, setChoiceSelected] = useState<string | null>(null)
 
-  // Stats
-  const [directCorrect, setDirectCorrect] = useState(0)   // gõ đúng ngay lần đầu
-  const [withScaffold, setWithScaffold] = useState(0)      // cần hỗ trợ
-
+  // ── Refs ──
   const inputRef = useRef<HTMLInputElement>(null)
+  const retypeRef = useRef<HTMLInputElement>(null)
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
 
-  // Speak helper
+  const submitLockRef = useRef(false)
+  const correctionLockRef = useRef(false)
+  
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearAllTimers = useCallback(() => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current)
+    feedbackTimerRef.current = null
+    advanceTimerRef.current = null
+  }, [])
+
+  useEffect(() => {
+    return () => clearAllTimers()
+  }, [clearAllTimers])
+
   const speakWord = useCallback((text: string) => {
     window.speechSynthesis.cancel()
     const utt = new SpeechSynthesisUtterance(text)
@@ -98,10 +229,9 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
     window.speechSynthesis.speak(utt)
   }, [])
 
-  // Generate choice options for a word
   const buildChoiceOptions = useCallback((vocab: VocabItem, pool: VocabItem[]) => {
     const correct = vocab.meanings.join(', ')
-    const others = pool.filter(w => w._id !== vocab._id).map(w => w.meanings.join(', '))
+    const others = pool.filter(w => getWordId(w) !== getWordId(vocab)).map(w => w.meanings.join(', '))
     const wrongs = shuffleArray(others).slice(0, 3)
     return shuffleArray([correct, ...wrongs])
   }, [])
@@ -124,20 +254,27 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
         const words: VocabItem[] = json.data
         setAllWords(words)
         setTotalWords(words.length)
+        
         setPassedIds(new Set())
-        setDirectCorrect(0)
-        setWithScaffold(0)
+        setWrongAttemptsByWord({})
+        setFailedWords([])
+        setFirstAttemptByWord({})
 
         const initialQueue: WordState[] = words.map(v => ({
           vocab: v,
           stage: 'type',
-          hintUsed: false,
+          hintLevel: 0,
         }))
         setQueue(initialQueue)
         setTypingInput('')
-        setTypingStatus('idle')
-        setShowHint(false)
-        setHintUsedCurrentCard(false)
+        setRetypeInput('')
+        setTypingPhase('answering')
+        setNearMissMsg('')
+        
+        clearAllTimers()
+        submitLockRef.current = false
+        correctionLockRef.current = false
+        
         setChoiceOptions(buildChoiceOptions(words[0], words))
         setChoiceSelected(null)
         setStarted(true)
@@ -151,32 +288,25 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
     }
   }
 
-  // Current word
   const current = queue[0] ?? null
 
-  // Auto-focus input when stage is type/type_retry
   useEffect(() => {
     if (current && (current.stage === 'type' || current.stage === 'type_retry')) {
-      setTimeout(() => inputRef.current?.focus(), 100)
+      if (typingPhase === 'answering') {
+         setTimeout(() => inputRef.current?.focus(), 100)
+      } else if (typingPhase === 'correcting') {
+         setTimeout(() => retypeRef.current?.focus(), 100)
+      }
     }
-  }, [current?.vocab._id, current?.stage])
+  }, [current?.vocab._id, current?.stage, typingPhase])
 
-  // Build choice options when entering choice stage
   useEffect(() => {
     if (current?.stage === 'choice' && allWords.length > 0) {
       setChoiceOptions(buildChoiceOptions(current.vocab, allWords))
       setChoiceSelected(null)
     }
-  }, [current?.stage, current?.vocab._id])
+  }, [current?.stage, getWordId(current?.vocab || {} as VocabItem), buildChoiceOptions, allWords])
 
-  // Auto speak on type stage
-  useEffect(() => {
-    if (current && current.stage === 'type_retry') {
-      speakWord(current.vocab.word)
-    }
-  }, [current?.vocab._id, current?.stage])
-
-  // Submit progress
   const submitProgress = useCallback(async (wordId: string, skill: string, isCorrect: boolean, isHinted = false) => {
     try {
       await fetch(`${PROGRESS_API_URL}/review`, {
@@ -189,121 +319,153 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
     }
   }, [authHeaders])
 
-  // Advance queue: remove front, optionally push to back
   const advance = useCallback((nextQueue: WordState[]) => {
+    submitLockRef.current = false
+    correctionLockRef.current = false
+    clearAllTimers()
     setQueue(nextQueue)
     setTypingInput('')
-    setTypingStatus('idle')
-    setShowHint(false)
-    setHintUsedCurrentCard(false)
+    setRetypeInput('')
+    setTypingPhase('answering')
+    setNearMissMsg('')
     setChoiceSelected(null)
-  }, [])
-
-  // Mark current word as PASSED
-  const markPassed = useCallback((isDirect: boolean) => {
-    if (!current) return
-    const newPassed = new Set(passedIds)
-    newPassed.add(current.vocab._id)
-    setPassedIds(newPassed)
-    if (isDirect) setDirectCorrect(p => p + 1)
-    else setWithScaffold(p => p + 1)
-
-    // Confetti milestone
-    if (newPassed.size === totalWords) {
-      setTimeout(() => confetti({ particleCount: 180, spread: 80, origin: { y: 0.6 } }), 300)
-    }
-
-    const newQueue = queue.slice(1)
-    advance(newQueue)
-  }, [current, passedIds, queue, advance, totalWords])
+  }, [clearAllTimers])
 
   // ── HANDLE TYPE SUBMIT ──
   const handleTypeSubmit = useCallback((e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    if (!current || typingStatus !== 'idle' || !typingInput.trim()) return
+    if (submitLockRef.current) return
+    if (typingPhase !== 'answering') return
+    if (!typingInput.trim() || !current) return
 
-    const userAnswer = typingInput.trim().toLowerCase()
-    const correct = current.vocab.word.toLowerCase()
-    // Also accept synonyms
-    const isCorrect = userAnswer === correct ||
-      (current.vocab.synonyms || []).some(s => s.toLowerCase() === userAnswer)
+    submitLockRef.current = true
 
-    setTypingStatus(isCorrect ? 'correct' : 'incorrect')
-    const isFirstTry = current.stage === 'type'
-    const isRetry = current.stage === 'type_retry'
+    const wordId = getWordId(current.vocab)
+    const { isCorrect, isNearMiss, nearMissTarget } = checkAnswer(typingInput, current.vocab)
+    const isHinted = current.hintLevel >= 1
+    
+    // Ghi first attempt
+    if (!(wordId in firstAttemptByWord)) {
+      setFirstAttemptByWord(prev => ({ ...prev, [wordId]: isCorrect }))
+    }
 
-    submitProgress(current.vocab._id, 'writing', isCorrect, current.hintUsed || hintUsedCurrentCard)
+    submitProgress(wordId, 'writing', isCorrect, isHinted)
 
     if (isCorrect) {
-      if (isFirstTry && !hintUsedCurrentCard) {
-        toast.success('Xuất sắc! 🎯')
-      } else {
-        toast.success('Chính xác! 💪')
+      setTypingPhase('feedback_ok')
+      
+      const newPassed = new Set(passedIds)
+      newPassed.add(wordId)
+      setPassedIds(newPassed)
+
+      if (newPassed.size === totalWords) {
+        setTimeout(() => confetti({ particleCount: 180, spread: 80, origin: { y: 0.6 } }), 300)
       }
-      setTimeout(() => {
-        markPassed(isFirstTry && !hintUsedCurrentCard)
-      }, 1200)
-    } else {
-      // Wrong
-      setTimeout(() => {
-        if (isFirstTry) {
-          // Escalate to choice
-          const newQueue: WordState[] = [
-            { ...current, stage: 'choice', hintUsed: current.hintUsed || hintUsedCurrentCard },
-            ...queue.slice(1)
-          ]
-          advance(newQueue)
+
+      feedbackTimerRef.current = setTimeout(() => {
+        if (isHinted && enableRepeat) {
+          // Đúng có hint + enableRepeat → requeue sau 2 từ
+          advance(requeue(queue, current))
         } else {
-          // type_retry failed → push to end of queue
-          const rest = queue.slice(1)
-          const retried: WordState = { ...current, stage: 'type', hintUsed: false }
-          advance([...rest, retried])
-          toast.error(`Sai rồi! Đáp án: "${current.vocab.word}". Sẽ hỏi lại sau.`)
+          // Đúng không hint, hoặc enableRepeat=false → xóa
+          advance(queue.slice(1))
         }
-      }, 2000)
+      }, 700)
+      
+    } else {
+      // Sai
+      const currentAttempts = (wrongAttemptsByWord[wordId] ?? 0) + 1
+      setWrongAttemptsByWord(prev => ({ ...prev, [wordId]: currentAttempts }))
+      
+      setTypingPhase('feedback_fail')
+      
+      if (isNearMiss) {
+        setNearMissMsg(`Gần đúng! Kiểm tra lại chính tả: ${nearMissTarget}`)
+      } else {
+        setNearMissMsg('')
+      }
+
+      feedbackTimerRef.current = setTimeout(() => {
+        setTypingPhase('correcting')
+      }, 800) // Chờ 0.8s để xem đáp án đúng rồi bắt gõ lại
     }
-  }, [current, typingInput, typingStatus, hintUsedCurrentCard, queue, advance, markPassed, submitProgress])
+  }, [current, typingInput, typingPhase, firstAttemptByWord, passedIds, totalWords, enableRepeat, queue, wrongAttemptsByWord, submitProgress, advance])
+
+  // ── HANDLE CORRECTION SUBMIT ──
+  const handleCorrection = useCallback((e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (correctionLockRef.current) return
+    if (typingPhase !== 'correcting') return
+    if (!retypeInput.trim() || !current) return
+
+    const { isCorrect } = checkAnswer(retypeInput, current.vocab)
+    
+    if (isCorrect) {
+      correctionLockRef.current = true
+      setTypingPhase('done')
+      
+      advanceTimerRef.current = setTimeout(() => {
+        const wordId = getWordId(current.vocab)
+        const attempts = wrongAttemptsByWord[wordId] ?? 0
+        
+        if (attempts >= 3 || !enableRepeat) {
+           // Đánh dấu failed (hoặc nếu không repeat thì xem như xong nhưng k tính mastery)
+           const nextFailedWords = [...failedWords, current.vocab]
+           setFailedWords(nextFailedWords)
+           advance(queue.slice(1))
+        } else {
+           // Requeue sau 2 từ
+           advance(requeue(queue, current))
+        }
+      }, 400)
+    } else {
+      toast.error('Vui lòng gõ lại chính xác đáp án!')
+    }
+  }, [current, retypeInput, typingPhase, wrongAttemptsByWord, enableRepeat, failedWords, queue, advance])
+
+  // ── HANDLE HINT ──
+  const handleHint = () => {
+    if (typingPhase !== 'answering') return
+    if (!current) return
+    
+    const nextLevel = current.hintLevel + 1
+    if (nextLevel > 4) return
+
+    setQueue(prev => [{ ...prev[0], hintLevel: nextLevel }, ...prev.slice(1)])
+    
+    if (nextLevel === 1) {
+       speakWord(current.vocab.word)
+    }
+  }
 
   // ── HANDLE CHOICE SELECT ──
+  // (Giữ nguyên logic của ChoiceMode cũ vì nó thuộc Phase B, chỉ thay đổi requeue thay vì push)
   const handleChoiceSelect = useCallback((option: string) => {
     if (!current || choiceSelected) return
     setChoiceSelected(option)
     const correct = current.vocab.meanings.join(', ')
     const isCorrect = option === correct
 
-    submitProgress(current.vocab._id, 'recall', isCorrect, true)
+    submitProgress(getWordId(current.vocab), 'recall', isCorrect, true)
 
     setTimeout(() => {
       if (isCorrect) {
-        // Move to type_retry
-        const newQueue: WordState[] = [
-          { ...current, stage: 'type_retry', hintUsed: true },
-          ...queue.slice(1)
-        ]
-        advance(newQueue)
+        const nextState: WordState = { ...current, stage: 'type_retry', hintLevel: 1 } // isHinted
+        advance([nextState, ...queue.slice(1)])
       } else {
-        // Move to flashcard
-        const newQueue: WordState[] = [
-          { ...current, stage: 'flashcard', hintUsed: true },
-          ...queue.slice(1)
-        ]
-        advance(newQueue)
+        const nextState: WordState = { ...current, stage: 'flashcard', hintLevel: 1 }
+        advance([nextState, ...queue.slice(1)])
       }
     }, 1500)
   }, [current, choiceSelected, queue, advance, submitProgress])
 
-  // ── HANDLE FLASHCARD CONTINUE ──
   const handleFlashcardContinue = useCallback(() => {
     if (!current) return
     speakWord(current.vocab.word)
-    const newQueue: WordState[] = [
-      { ...current, stage: 'type_retry', hintUsed: true },
-      ...queue.slice(1)
-    ]
-    advance(newQueue)
+    const nextState: WordState = { ...current, stage: 'type_retry', hintLevel: 1 }
+    advance([nextState, ...queue.slice(1)])
   }, [current, queue, advance, speakWord])
 
-  // Keyboard shortcut: Enter to submit
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && current?.stage === 'flashcard') {
@@ -313,6 +475,7 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [current?.stage, handleFlashcardContinue])
+
 
   const progressPct = totalWords > 0 ? (passedIds.size / totalWords) * 100 : 0
   const isComplete = started && queue.length === 0
@@ -334,7 +497,6 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
             </div>
 
             <div className="writing-setup-body">
-              {/* Left col */}
               <div className="writing-setup-section">
                 <label className="ws-label">Nguồn từ vựng</label>
                 <select className="ws-select" value={sourceMode} onChange={e => setSourceMode(e.target.value)}>
@@ -352,9 +514,13 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
                     <option key={d._id} value={d._id}>{d.name}</option>
                   ))}
                 </select>
+
+                <label className="ws-label" style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={enableRepeat} onChange={e => setEnableRepeat(e.target.checked)} />
+                  Lặp lại từ sai (Enable Repeat)
+                </label>
               </div>
 
-              {/* Right col */}
               <div className="writing-setup-section">
                 <label className="ws-label">Số lượng từ</label>
                 <div className="ws-count-row">
@@ -380,11 +546,10 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
                   />
                 </div>
 
-                {/* Flow explanation */}
                 <div style={{ marginTop: 20, padding: '14px', background: 'rgba(139,92,246,0.06)', borderRadius: '12px', border: '1px solid rgba(139,92,246,0.2)' }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed', marginBottom: 8 }}>💡 Cách hoạt động</p>
                   <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-                    Gõ từ tiếng Anh từ nghĩa → Sai? Trắc nghiệm → Vẫn sai? Xem flashcard → Gõ lại
+                    Nhập đúng tiếng Anh từ nghĩa. Gợi ý 5 cấp độ (âm thanh, số ký tự...). Bắt buộc gõ lại sau khi sai.
                   </p>
                 </div>
               </div>
@@ -404,24 +569,22 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
 
   // ===== RENDER: COMPLETE =====
   if (isComplete) {
-    const pct = totalWords > 0 ? Math.round((directCorrect / totalWords) * 100) : 0
+    const directCorrectCount = Object.values(firstAttemptByWord).filter(v => v).length
+    const pct = totalWords > 0 ? Math.round((directCorrectCount / totalWords) * 100) : 0
     const emoji = pct >= 80 ? '🎉' : pct >= 50 ? '💪' : '📖'
+    
     return (
       <div className="writing-container">
         <div className="writing-complete">
           <div className="wc-card">
             <div className="wc-emoji">{emoji}</div>
             <h2 className="wc-title">Hoàn thành!</h2>
-            <p className="wc-subtitle">Bạn đã hoàn thành phiên Writing</p>
+            <p className="wc-subtitle">Bạn đã kết thúc phiên Writing</p>
 
             <div className="wc-stats">
               <div className="wc-stat">
-                <span className="wc-stat-value green">{directCorrect}</span>
+                <span className="wc-stat-value green">{directCorrectCount}</span>
                 <span className="wc-stat-label">Đúng ngay</span>
-              </div>
-              <div className="wc-stat">
-                <span className="wc-stat-value" style={{ color: '#f59e0b' }}>{withScaffold}</span>
-                <span className="wc-stat-label">Cần hỗ trợ</span>
               </div>
               <div className="wc-stat">
                 <span className="wc-stat-value purple">{pct}%</span>
@@ -429,11 +592,23 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
               </div>
             </div>
 
-            <div className="wc-actions">
+            {failedWords.length > 0 && (
+              <div className="wp-failed-section">
+                 <h3 className="wp-failed-title">📋 Cần ôn lại ({failedWords.length} từ)</h3>
+                 <div className="wp-failed-list">
+                    {failedWords.map(w => (
+                       <div key={getWordId(w)} className="wp-failed-item">
+                          <span className="wp-failed-en">{w.word}</span>
+                          <span className="wp-failed-vi">{w.meanings.join(', ')}</span>
+                       </div>
+                    ))}
+                 </div>
+              </div>
+            )}
+
+            <div className="wc-actions" style={{ marginTop: 24 }}>
               <button className="wc-btn-primary" onClick={() => {
                 setStarted(false)
-                setQueue([])
-                setPassedIds(new Set())
               }}>
                 <ArrowPathIcon style={{ width: 18, height: 18 }} />
                 Luyện tập lại
@@ -483,7 +658,7 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
         {/* Card */}
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${current.vocab._id}-${current.stage}`}
+            key={`${getWordId(current.vocab)}-${current.stage}`}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
@@ -507,68 +682,107 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
                   </div>
                 )}
 
-                <div className="wp-type-hint">
+                <div className="wp-hint-area">
+                  <div className="wp-hint-level-bar">
+                    {[1,2,3,4].map(l => (
+                      <div key={l} className={`wp-hint-dot ${current.hintLevel >= l ? 'active' : ''}`} />
+                    ))}
+                  </div>
+                  
+                  {current.hintLevel > 0 && current.hintLevel <= 1 && (
+                     <div className="wp-hint-feedback">
+                        <SpeakerWaveIcon className="icon icon-inline" /> Đã nghe phát âm
+                     </div>
+                  )}
+
+                  {current.hintLevel >= 2 && (
+                    <div className="wp-blanks">
+                      {buildHintDisplay(current.vocab.word, current.hintLevel)}
+                    </div>
+                  )}
+                  
                   <button
-                    className={`wp-hint-btn ${hintUsedCurrentCard ? 'used' : ''}`}
-                    onClick={() => {
-                      setHintUsedCurrentCard(true)
-                      setShowHint(true)
-                    }}
+                    className={`wp-hint-btn ${current.hintLevel >= 4 ? 'disabled' : ''}`}
+                    onClick={handleHint}
+                    disabled={current.hintLevel >= 4 || typingPhase !== 'answering'}
+                    type="button"
                   >
                     <LightBulbIcon className="icon" />
-                    Gợi ý chữ
-                  </button>
-                  <button
-                    className={`wp-hint-btn ${hintUsedCurrentCard ? 'used' : ''}`}
-                    onClick={() => {
-                      setHintUsedCurrentCard(true)
-                      speakWord(current.vocab.word)
-                    }}
-                  >
-                    <SpeakerWaveIcon className="icon" />
-                    Nghe gợi ý
+                    {current.hintLevel === 0 ? 'Gợi ý' : current.hintLevel === 1 ? 'Gợi ý số ký tự' : current.hintLevel === 2 ? 'Hiện chữ đầu' : current.hintLevel === 3 ? 'Thêm ký tự' : 'Đã hết gợi ý'} →
                   </button>
                 </div>
 
-                {showHint && typingStatus === 'idle' && (
-                  <div className="wp-hint-text">
-                    Từ này bắt đầu bằng: <strong>{current.vocab.word.slice(0, 2)}...</strong>
-                    {current.vocab.word.length > 4 && ` (${current.vocab.word.length} chữ cái)`}
-                  </div>
+                {/* Form: Answering */}
+                {(typingPhase === 'answering' || typingPhase === 'feedback_ok' || typingPhase === 'feedback_fail') && (
+                   <form className="wp-type-form" onSubmit={handleTypeSubmit}>
+                     <input
+                       ref={inputRef}
+                       type="text"
+                       className={`wp-type-input ${typingPhase === 'feedback_ok' ? 'correct' : typingPhase === 'feedback_fail' ? 'incorrect' : ''}`}
+                       placeholder="Gõ từ tiếng Anh..."
+                       value={typingInput}
+                       onChange={e => setTypingInput(e.target.value)}
+                       disabled={typingPhase !== 'answering'}
+                       autoComplete="off"
+                       spellCheck={false}
+                     />
+                     
+                     {typingPhase === 'feedback_ok' && (
+                       <div className="wp-feedback correct"><CheckCircleIcon className="icon icon-inline"/> Chính xác! 🎯</div>
+                     )}
+                     {typingPhase === 'feedback_fail' && (
+                       <div className="wp-feedback incorrect">
+                         <XMarkIcon className="icon icon-inline"/> Đáp án đúng: <strong>{formatForDisplay(current.vocab.word)}</strong>
+                       </div>
+                     )}
+                     {nearMissMsg && (
+                       <div className="wp-near-miss-badge">{nearMissMsg}</div>
+                     )}
+                     
+                     {typingPhase === 'answering' && (
+                       <button
+                         type="submit"
+                         className="wp-submit-btn"
+                         disabled={!typingInput.trim()}
+                       >
+                         Kiểm tra
+                       </button>
+                     )}
+                   </form>
                 )}
 
-                <form className="wp-type-form" onSubmit={handleTypeSubmit}>
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    className={`wp-type-input ${typingStatus !== 'idle' ? typingStatus : ''}`}
-                    placeholder="Gõ từ tiếng Anh..."
-                    value={typingInput}
-                    onChange={e => setTypingInput(e.target.value)}
-                    disabled={typingStatus !== 'idle'}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  {typingStatus === 'correct' && (
-                    <div className="wp-feedback correct">✓ Chính xác! 🎯</div>
-                  )}
-                  {typingStatus === 'incorrect' && (
-                    <div className="wp-feedback incorrect">
-                      ✗ Sai rồi! Đáp án: <strong>{current.vocab.word}</strong>
+                {/* Form: Correcting */}
+                {(typingPhase === 'correcting' || typingPhase === 'done') && (
+                  <form className="wp-type-form" onSubmit={handleCorrection}>
+                    <div className="wp-feedback incorrect" style={{ marginBottom: 12 }}>
+                       <XMarkIcon className="icon icon-inline"/> Đáp án đúng: <strong>{formatForDisplay(current.vocab.word)}</strong>
                     </div>
-                  )}
-                  <button
-                    type="submit"
-                    className="wp-submit-btn"
-                    disabled={typingStatus !== 'idle' || !typingInput.trim()}
-                  >
-                    Kiểm tra
-                  </button>
-                </form>
+                    
+                    <input
+                      ref={retypeRef}
+                      type="text"
+                      className="wp-retype-input"
+                      placeholder={`Gõ lại: ${formatForDisplay(current.vocab.word)}`}
+                      value={retypeInput}
+                      onChange={e => setRetypeInput(e.target.value)}
+                      disabled={typingPhase === 'done'}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    
+                    <button
+                      type="submit"
+                      className="wp-submit-btn"
+                      disabled={!retypeInput.trim() || typingPhase === 'done'}
+                    >
+                      Tiếp tục
+                    </button>
+                  </form>
+                )}
               </>
             )}
 
-            {/* ── CHOICE ── */}
+            {/* ── CHOICE (Phase B - Giữ nguyên tạm) ── */}
             {current.stage === 'choice' && (
               <>
                 <div className="wp-choice-header">
@@ -604,15 +818,6 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
                     )
                   })}
                 </div>
-
-                {choiceSelected && (
-                  <div className="wp-feedback" style={{ marginTop: 16, textAlign: 'center' }}>
-                    {choiceSelected === current.vocab.meanings.join(', ')
-                      ? <span className="wp-feedback correct">✓ Đúng! Bây giờ hãy gõ từ này.</span>
-                      : <span className="wp-feedback incorrect">✗ Sai! Hãy xem flashcard để học lại.</span>
-                    }
-                  </div>
-                )}
               </>
             )}
 
@@ -632,17 +837,6 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
                   <div className="wp-fc-pron">/{current.vocab.pronunciation}/</div>
                 )}
                 <div className="wp-fc-meaning">{current.vocab.meanings.join(', ')}</div>
-
-                {current.vocab.examples && current.vocab.examples.length > 0 && (
-                  <div className="wp-fc-examples">
-                    {current.vocab.examples.slice(0, 2).map((ex, i) => (
-                      <div key={i} className="wp-fc-example">
-                        <p className="en">{ex.en}</p>
-                        <p className="vi">{ex.vi}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 <button className="wp-fc-continue" onClick={handleFlashcardContinue}>
                   <PlayIcon className="icon" />

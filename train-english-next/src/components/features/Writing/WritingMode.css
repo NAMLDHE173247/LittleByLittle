@@ -316,36 +316,81 @@
   font-style: italic;
 }
 
-.wp-type-hint {
+/* Hints */
+.wp-hint-area {
   display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.wp-hint-level-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wp-hint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border, #e5e7eb);
+  transition: all 0.3s;
+}
+
+.wp-hint-dot.active {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245,158,11,0.5);
+}
+
+.wp-hint-feedback {
+  font-size: 13px;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 4px 10px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wp-blanks {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 24px;
+  letter-spacing: 4px;
+  font-weight: 700;
+  color: #111;
+  background: rgba(139,92,246,0.08);
+  padding: 12px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
 }
 
 .wp-hint-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
+  padding: 8px 16px;
   border: 1.5px solid var(--border, #e5e7eb);
   border-radius: 8px;
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-secondary, #6b7280);
   cursor: pointer;
   transition: all 0.15s;
 }
 
-.wp-hint-btn:hover {
-  border-color: #f59e0b;
-  color: #d97706;
-}
-
-.wp-hint-btn.used {
+.wp-hint-btn:hover:not(:disabled) {
   border-color: #f59e0b;
   color: #d97706;
   background: rgba(245,158,11,0.07);
+}
+
+.wp-hint-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .wp-hint-btn .icon {
@@ -353,24 +398,15 @@
   height: 16px;
 }
 
-.wp-hint-text {
-  background: #fef9c3;
-  border: 1px solid #fde68a;
-  border-radius: 10px;
-  padding: 10px 16px;
-  font-size: 14px;
-  color: #92400e;
-  margin-bottom: 16px;
-  text-align: center;
-}
 
+/* Forms */
 .wp-type-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.wp-type-input {
+.wp-type-input, .wp-retype-input {
   width: 100%;
   padding: 14px 18px;
   font-size: 18px;
@@ -385,7 +421,7 @@
   box-sizing: border-box;
 }
 
-.wp-type-input:focus {
+.wp-type-input:focus, .wp-retype-input:focus {
   border-color: #8b5cf6;
 }
 
@@ -399,6 +435,10 @@
   border-color: #ef4444;
   background: rgba(239,68,68,0.05);
   color: #b91c1c;
+}
+
+.wp-retype-input {
+  border-color: #3b82f6; /* Blueish for correction */
 }
 
 .wp-feedback {
@@ -417,6 +457,16 @@
 .wp-feedback.incorrect {
   color: #b91c1c;
   background: rgba(239,68,68,0.08);
+}
+
+.wp-near-miss-badge {
+  text-align: center;
+  font-size: 14px;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 8px;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 .wp-submit-btn {
@@ -536,25 +586,6 @@
   cursor: not-allowed;
 }
 
-.wp-choice-continue {
-  margin-top: 16px;
-  width: 100%;
-  padding: 12px;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-  color: white;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.wp-choice-continue:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
 /* ── FLASHCARD stage ── */
 .wp-fc-card {
   text-align: center;
@@ -597,28 +628,6 @@
   background: rgba(139,92,246,0.08);
   border-radius: 12px;
   display: inline-block;
-}
-
-.wp-fc-examples {
-  text-align: left;
-  border-top: 1px solid var(--border, #e5e7eb);
-  padding-top: 14px;
-  margin-top: 8px;
-}
-
-.wp-fc-example {
-  margin-bottom: 10px;
-}
-
-.wp-fc-example .en {
-  font-size: 14px;
-  font-style: italic;
-  color: var(--text-primary, #333);
-}
-
-.wp-fc-example .vi {
-  font-size: 13px;
-  color: var(--text-secondary, #6b7280);
 }
 
 .wp-fc-continue {
@@ -722,6 +731,50 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* Failed section */
+.wp-failed-section {
+  text-align: left;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.wp-failed-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #991b1b;
+  margin: 0 0 12px;
+}
+
+.wp-failed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wp-failed-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+}
+
+.wp-failed-en {
+  font-weight: 600;
+  color: #111;
+}
+
+.wp-failed-vi {
+  color: #6b7280;
+}
+
 
 .wc-actions {
   display: flex;
