@@ -73,8 +73,8 @@ function normalizeForComparison(s: string): string {
     .normalize('NFKC')                    // Unicode chuẩn hóa trước
     .trim()
     .toLowerCase()
-    .replace(/[''‛]/g, "'")              // smart single quote → thẳng
-    .replace(/[""„‟]/g, '"')            // smart double quote → thẳng
+    .replace(/[‘’‛`´]/g, "'")            // smart single quote → thẳng
+    .replace(/[“”„‟]/g, '"')            // smart double quote → thẳng
     .replace(/\s+/g, ' ')               // nhiều khoảng trắng → 1
 }
 
@@ -145,7 +145,7 @@ function buildHintDisplay(word: string, hintLevel: number): string {
     if (!/[a-zA-Z]/.test(c)) return c 
     const letterPos = letterIndices.indexOf(i)
     return letterPos < revealCount ? c : '_'
-  }).join(hintLevel === 2 ? ' ' : '') // only separate words properly, not each letter if not level 2
+  }).join('')
 }
 
 function requeue(queue: WordState[], current: WordState): WordState[] {
