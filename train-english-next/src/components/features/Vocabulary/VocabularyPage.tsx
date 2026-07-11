@@ -398,6 +398,20 @@ export default function VocabularyPage({
                   <CheckIcon className="icon icon-inline" style={{ width: 14, height: 14 }} /> 
                   {isSelectionMode ? 'Hủy chọn' : 'Chọn nhiều'}
                 </button>
+                {selectedRows.length > 0 && (
+                  <button 
+                    className="btn-primary" 
+                    style={{ padding: '4px 10px', fontSize: '12px' }}
+                    onClick={() => {
+                      const selectedVocabs = vocabularies.filter((v: any) => selectedRows.includes(v._id));
+                      sessionStorage.setItem('writingWords', JSON.stringify(selectedVocabs));
+                      window.location.href = '/writing';
+                    }}
+                  >
+                    <PencilSquareIcon className="icon icon-inline" style={{ width: 14, height: 14 }} /> 
+                    Writing
+                  </button>
+                )}
               </div>
               <div className="page-buttons">
                 <button
@@ -614,18 +628,24 @@ export default function VocabularyPage({
                         <td className="col-decks">
                           {vocab.deckIds && vocab.deckIds.length > 0 ? (
                             <div className="deck-badges">
-                              {vocab.deckIds.map((d: any, i: number) => (
-                                <span
-                                  key={d._id || i}
-                                  className="badge badge-deck"
-                                  style={{ backgroundColor: d.color + '20', color: d.color, borderColor: d.color + '40' }}
-                                >
-                                  {d.name}
-                                </span>
-                              ))}
+                              {vocab.deckIds.map((d: any, i: number) => {
+                                if (!d) return null;
+                                const deckId = typeof d === 'string' ? d : d._id;
+                                const deck = decks.find((dk: any) => dk._id === deckId) || (typeof d === 'object' ? d : null);
+                                if (!deck) return null;
+                                return (
+                                  <span
+                                    key={deck._id || i}
+                                    className="badge badge-deck"
+                                    style={{ backgroundColor: deck.color + '20', color: deck.color, borderColor: deck.color + '40' }}
+                                  >
+                                    {deck.name}
+                                  </span>
+                                );
+                              })}
                               <button
                                 className="quick-edit-deck-btn"
-                                onClick={(e) => { e.stopPropagation(); setQuickDeckVocab(vocab); setQuickDeckIds(vocab.deckIds.map((d: any) => d._id)) }}
+                                onClick={(e) => { e.stopPropagation(); setQuickDeckVocab(vocab); setQuickDeckIds(vocab.deckIds.map((d: any) => typeof d === 'string' ? d : d?._id).filter(Boolean)) }}
                                 title="Sửa nhanh bộ thẻ"
                               >
                                 <PencilSquareIcon className="icon" style={{ width: 14, height: 14 }} />

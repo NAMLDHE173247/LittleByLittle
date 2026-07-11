@@ -19,9 +19,10 @@ interface DecksPageProps {
   fetchDecks: () => Promise<void>
   fetchVocabularies: () => Promise<void>
   fetchMetadata: () => Promise<void>
+  onDeckClick?: (deckId: string) => void
 }
 
-export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchMetadata }: DecksPageProps) {
+export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchMetadata, onDeckClick }: DecksPageProps) {
   const { authHeaders } = useAuth()
   
   const [showDeckModal, setShowDeckModal] = useState(false)
@@ -117,7 +118,7 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
           </div>
         ) : (
           decks.map(deck => (
-            <div key={deck._id} className="deck-card" style={{ borderTopColor: deck.color }}>
+            <div key={deck._id} className="deck-card" style={{ borderTopColor: deck.color, cursor: onDeckClick ? 'pointer' : 'default' }} onClick={() => onDeckClick && onDeckClick(deck._id)}>
               <div className="deck-card-header">
                 <div className="deck-card-color" style={{ backgroundColor: deck.color }} />
                 <h3 className="deck-card-name">{deck.name}</h3>
@@ -126,13 +127,13 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                 <p className="deck-card-desc">{deck.description}</p>
               )}
               <div className="deck-card-stats">
-                <span className="deck-card-count">{deck.wordCount} từ</span>
+                <span className="deck-card-count">{deck.wordCount || 0} từ</span>
               </div>
               <div className="deck-card-actions">
-                <button className="btn-outline btn-sm" onClick={() => openDeckModal(deck)}>
+                <button className="btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); openDeckModal(deck); }}>
                   <PencilSquareIcon className="icon icon-inline" /> Sửa
                 </button>
-                <button className="btn-danger-sm" onClick={() => setDeleteDeckTarget(deck)}>
+                <button className="btn-danger-sm" onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck); }}>
                   <TrashIcon className="icon icon-inline" /> Xóa
                 </button>
               </div>

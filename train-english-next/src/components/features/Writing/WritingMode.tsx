@@ -48,6 +48,7 @@ interface WordState {
 interface WritingModeProps {
   onExit: () => void
   decks?: any[]
+  initialWords?: VocabItem[]
 }
 
 const BASE_URL = ''
@@ -162,7 +163,7 @@ function requeue(queue: WordState[], current: WordState): WordState[] {
 }
 
 // ===== MAIN COMPONENT =====
-export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
+export default function WritingMode({ onExit, decks = [], initialWords }: WritingModeProps) {
   const { authHeaders } = useAuth()
 
   // ── Setup state ──
@@ -173,6 +174,7 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
   const [sourceMode, setSourceMode] = useState('lowest_score')
   const [filterDeck, setFilterDeck] = useState('')
   const [enableRepeat, setEnableRepeat] = useState(true)
+  const [hasAutoStarted, setHasAutoStarted] = useState(false)
 
   // ── Practice state ──
   const [allWords, setAllWords] = useState<VocabItem[]>([])
@@ -287,6 +289,38 @@ export default function WritingMode({ onExit, decks = [] }: WritingModeProps) {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (initialWords && initialWords.length > 0 && !started && !loading && !hasAutoStarted) {
+      setAllWords(initialWords)
+      setTotalWords(initialWords.length)
+      
+      setPassedIds(new Set())
+      setWrongAttemptsByWord({})
+      setFailedWords([])
+      setFirstAttemptByWord({})
+
+      const initialQueue: WordState[] = initialWords.map(v => ({
+        vocab: v,
+        stage: 'type',
+        hintLevel: 0,
+      }))
+      setQueue(initialQueue)
+      setTypingInput('')
+      setRetypeInput('')
+      setTypingPhase('answering')
+      setNearMissMsg('')
+      
+      clearAllTimers()
+      submitLockRef.current = false
+      correctionLockRef.current = false
+      
+      setChoiceOptions(buildChoiceOptions(initialWords[0], initialWords))
+      setChoiceSelected(null)
+      setStarted(true)
+      setHasAutoStarted(true)
+    }
+  }, [initialWords, started, loading, hasAutoStarted, buildChoiceOptions, clearAllTimers])
 
   const current = queue[0] ?? null
 

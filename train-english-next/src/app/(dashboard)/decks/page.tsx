@@ -1,10 +1,17 @@
 "use client";
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { useGlobalData } from '@/components/providers/GlobalDataProvider';
 import DecksPage from '@/components/features/Decks/DecksPage';
 
 export default function DecksRoute() {
-  const { decks, fetchDecks, fetchVocabularies, fetchMetadata } = useGlobalData();
+  const { decks, fetchDecks, fetchVocabularies, fetchMetadata, setFilterDeck } = useGlobalData();
+  const router = useRouter();
+
+  const handleDeckClick = (deckId: string) => {
+    setFilterDeck(deckId);
+    router.push('/vocabulary');
+  };
 
   return (
     <DecksPage
@@ -12,6 +19,7 @@ export default function DecksRoute() {
       fetchDecks={fetchDecks}
       fetchVocabularies={fetchVocabularies}
       fetchMetadata={fetchMetadata}
+      onDeckClick={handleDeckClick}
     />
   );
 }

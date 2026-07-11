@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   ChartBarIcon, BookOpenIcon, RectangleStackIcon, AcademicCapIcon,
   TrophyIcon, SunIcon, MoonIcon, ArrowRightStartOnRectangleIcon,
-  ChevronLeftIcon, ChevronRightIcon, LightBulbIcon, QuestionMarkCircleIcon, UserGroupIcon, FireIcon, PencilSquareIcon
+  ChevronLeftIcon, ChevronRightIcon, LightBulbIcon, QuestionMarkCircleIcon, UserGroupIcon, FireIcon, PencilSquareIcon, BoltIcon
 } from '@heroicons/react/24/outline'
 import './Sidebar.css'
 
@@ -17,13 +17,13 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🔥</span>, label: 'Nhật ký', key: 'statistics' },
-  { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>📈</span>, label: 'Streak', key: 'streak' },
-  { icon: <img src="/mastery-icon.png" alt="mastery" className="sb-icon" style={{ width: 22, height: 22 }} />, label: 'Độ thông thạo', key: 'mastery' },
-  { icon: <span className="sb-icon" style={{ fontSize: '20px', lineHeight: 1 }}>🐝</span>, label: 'Cày thông thạo', key: 'practice' },
-  { icon: <PencilSquareIcon className="sb-icon" />, label: 'Writing', key: 'writing' },
   { icon: <BookOpenIcon className="sb-icon" />, label: 'Từ vựng', key: 'vocabulary' },
   { icon: <RectangleStackIcon className="sb-icon" />, label: 'Bộ thẻ', key: 'decks' },
+  { icon: <PencilSquareIcon className="sb-icon" />, label: 'Writing', key: 'writing' },
+  { icon: <ChartBarIcon className="sb-icon" />, label: 'Nhật ký', key: 'statistics' },
+  { icon: <FireIcon className="sb-icon" />, label: 'Streak', key: 'streak' },
+  { icon: <TrophyIcon className="sb-icon" />, label: 'Độ thông thạo', key: 'mastery' },
+  { icon: <BoltIcon className="sb-icon" />, label: 'Cày thông thạo', key: 'practice' },
   {
     icon: <LightBulbIcon className="sb-icon" />,
     label: 'Luyện tập đơn',

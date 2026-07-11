@@ -218,7 +218,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       examples: vocab.examples.length > 0 ? vocab.examples : [{ en: '', vi: '' }],
       topic: vocab.topic, level: vocab.level, synonyms: vocab.synonyms.join(', '),
       antonyms: vocab.antonyms.join(', '), note: vocab.note, imageUrl: vocab.imageUrl || '',
-      deckIds: vocab.deckIds ? vocab.deckIds.map(d => d._id) : [],
+      deckIds: vocab.deckIds ? vocab.deckIds.map((d: any) => typeof d === 'string' ? d : d?._id).filter(Boolean) : [],
     });
     setFormError('');
     setShowModal(true);
