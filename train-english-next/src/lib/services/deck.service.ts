@@ -7,7 +7,7 @@ export class DeckService {
     const decks = await Deck.find({ userId }).sort({ createdAt: -1 }).lean();
     
     const counts = await Vocabulary.aggregate([
-      { $match: { userId } },
+      { $match: { deckIds: { $exists: true, $not: { $size: 0 } } } },
       { $unwind: "$deckIds" },
       { $group: { _id: "$deckIds", count: { $sum: 1 } } }
     ]);
