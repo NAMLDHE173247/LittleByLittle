@@ -3255,7 +3255,7 @@ body {
 /* --- Card Area --- */
 .fc-card-area {
   width: 100%;
-  max-width: 700px;
+  max-width: 550px;
   perspective: 1200px;
 }
 
@@ -4668,12 +4668,12 @@ body {
 }
 
 .deck-fc-wrapper .fc-card-area {
-  max-width: 100%;
+  max-width: 626px;
 }
 
 .deck-fc-wrapper .fc-card {
-  min-height: 480px;
-  height: 480px;
+  min-height: 423px;
+  height: 423px;
 }
 
 .deck-fc-wrapper .fc-main-text {

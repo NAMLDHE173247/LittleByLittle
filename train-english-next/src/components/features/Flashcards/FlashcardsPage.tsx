@@ -7,7 +7,13 @@ import {
   ChevronRightIcon,
   ArrowPathIcon,
   InformationCircleIcon,
-  RectangleStackIcon
+  RectangleStackIcon,
+  MicrophoneIcon,
+  ChatBubbleLeftRightIcon,
+  BookOpenIcon,
+  AcademicCapIcon,
+  DocumentCheckIcon,
+  MusicalNoteIcon
 } from '@heroicons/react/24/outline'
 import './FlashcardsPage.css'
 
@@ -123,8 +129,28 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
   const isImageHidden = fcImageDisplay === 'hidden'
   const imgSizeClass = fcImageSize === 'large' ? 'fc-back-image fc-image-large' : 'fc-back-image'
 
+  const studyModes = [
+    { key: 'speaking',  label: 'Speaking',   icon: MicrophoneIcon },
+    { key: 'dialogue',  label: 'Hội thoại',  icon: ChatBubbleLeftRightIcon },
+    { key: 'grammar',   label: 'Ngữ pháp',   icon: BookOpenIcon },
+    { key: 'reading',   label: 'Đọc hiểu',   icon: AcademicCapIcon },
+    { key: 'learn',     label: 'Học',         icon: RectangleStackIcon },
+    { key: 'test',      label: 'Kiểm tra',   icon: DocumentCheckIcon },
+    { key: 'dictation', label: 'Nghe Chép',  icon: MusicalNoteIcon },
+  ]
+
   return (
     <div className="fc-page">
+      {/* Study Mode Buttons */}
+      <div className="fc-mode-bar">
+        {studyModes.map(mode => (
+          <button key={mode.key} className="fc-mode-btn" title={mode.label}>
+            <mode.icon className="fc-mode-icon" />
+            <span>{mode.label}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Card Area */}
       <div className="fc-card-area">
         <div
@@ -198,15 +224,7 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
                 </div>
               </div>
             )}
-            <div className="fc-confetti">
-              <span className="fc-dot" style={{ background: '#F59E0B', width: 10, height: 10 }} />
-              <span className="fc-dot" style={{ background: '#EF4444', width: 7, height: 7 }} />
-              <span className="fc-dot" style={{ background: '#3B82F6', width: 8, height: 8 }} />
-              <span className="fc-dot" style={{ background: '#22C55E', width: 6, height: 6 }} />
-              <span className="fc-dot" style={{ background: '#A855F7', width: 9, height: 9 }} />
-              <span className="fc-dot" style={{ background: '#06B6D4', width: 5, height: 5 }} />
-              <span className="fc-dot" style={{ background: '#F97316', width: 7, height: 7 }} />
-            </div>
+
             <div className="fc-card-content">
               {showImageOnFront && card.imageUrl && !isImageHidden && (
                 <div className={`fc-image-wrapper ${isImageBlurred ? 'fc-image-blurred' : ''}`}>
@@ -215,7 +233,6 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
               )}
               <span className="fc-main-text">{frontText}</span>
               {frontSub && <span className="fc-sub-text">{frontSub}</span>}
-              <span className="fc-hint-text">{flipHint}</span>
             </div>
             <div className="fc-card-bottom">
               <label className="fc-auto-toggle" onClick={e => e.stopPropagation()} title="Tự động phát âm khi chuyển thẻ">
@@ -236,13 +253,7 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
             >
               <Cog6ToothIcon className="icon" />
             </button>
-            <div className="fc-confetti">
-              <span className="fc-dot" style={{ background: '#3B82F6', width: 10, height: 10 }} />
-              <span className="fc-dot" style={{ background: '#22C55E', width: 8, height: 8 }} />
-              <span className="fc-dot" style={{ background: '#F59E0B', width: 6, height: 6 }} />
-              <span className="fc-dot" style={{ background: '#EF4444', width: 9, height: 9 }} />
-              <span className="fc-dot" style={{ background: '#A855F7', width: 7, height: 7 }} />
-            </div>
+
             <div className="fc-card-content">
               {showImageOnBack && card.imageUrl && !isImageHidden && (
                 <div className={`fc-image-wrapper ${isImageBlurred ? 'fc-image-blurred' : ''}`}>
@@ -256,7 +267,6 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
               )}
               <span className="fc-main-text">{backText}</span>
               {backSub && <span className="fc-sub-text">{backSub}</span>}
-              <span className="fc-hint-text">{backHint}</span>
             </div>
             <div className="fc-card-bottom">
               <label className="fc-auto-toggle" onClick={e => e.stopPropagation()} title="Tự động phát âm khi chuyển thẻ">

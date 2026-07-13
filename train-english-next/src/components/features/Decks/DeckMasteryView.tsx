@@ -171,6 +171,26 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+
+        {totalPages > 1 && (
+          <div className="dm-pagination">
+            <button 
+              disabled={page <= 1} 
+              onClick={() => setPage(p => p - 1)}
+              className="dm-page-btn"
+            >
+              <ChevronLeftIcon className="icon" />
+            </button>
+            <span>Trang {page} / {totalPages}</span>
+            <button 
+              disabled={page >= totalPages} 
+              onClick={() => setPage(p => p + 1)}
+              className="dm-page-btn"
+            >
+              <ChevronRightIcon className="icon" />
+            </button>
+          </div>
+        )}
       </div>
 
       {loading && data.length === 0 ? (
@@ -272,25 +292,6 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
       )}
 
       <div className="dm-bottom-section">
-        {totalPages > 1 && (
-          <div className="dm-pagination">
-            <button 
-              disabled={page <= 1} 
-              onClick={() => setPage(p => p - 1)}
-              className="dm-page-btn"
-            >
-              <ChevronLeftIcon className="icon" />
-            </button>
-            <span>Trang {page} / {totalPages}</span>
-            <button 
-              disabled={page >= totalPages} 
-              onClick={() => setPage(p => p + 1)}
-              className="dm-page-btn"
-            >
-              <ChevronRightIcon className="icon" />
-            </button>
-          </div>
-        )}
 
         {totalSelectedCount > 0 && (
           <div className="dm-action-bar">
@@ -320,7 +321,9 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
 
         .dm-header-actions {
           display: flex;
-          justify-content: flex-end;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
         }
 
         .dm-search-box {
