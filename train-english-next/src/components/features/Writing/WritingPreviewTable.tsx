@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import './WritingPreviewTable.css';
 
 interface WritingPreviewTableProps {
@@ -9,6 +9,7 @@ interface WritingPreviewTableProps {
   showActions?: boolean;
   onRemoveWord?: (wordId: string) => void;
   onPrioritizeWord?: (wordId: string) => void;
+  onPracticeWordsUpdate?: (words: any[]) => void;
 }
 
 const safeNumber = (val: any) => {
@@ -19,6 +20,22 @@ const safeNumber = (val: any) => {
   return Math.round(num);
 };
 
+const getMasteryTier = (overall: number) => {
+  if (overall === 0) return 'not_started';
+  if (overall >= 90) return 'mastered';
+  if (overall >= 70) return 'familiar';
+  if (overall >= 40) return 'learning';
+  return 'not_started';
+};
+
+const TIER_CONFIG = [
+  { id: 'all', label: 'Tất cả', color: '#6366f1' },
+  { id: 'mastered', label: 'Thành thạo', color: '#22c55e' },
+  { id: 'familiar', label: 'Quen thuộc', color: '#3b82f6' },
+  { id: 'learning', label: 'Đang học', color: '#f59e0b' },
+  { id: 'not_started', label: 'Chưa bắt đầu', color: '#6b7280' }
+];
+
 export default function WritingPreviewTable({
   words,
   loading,
@@ -26,8 +43,86 @@ export default function WritingPreviewTable({
   emptyMessage = "Không có từ phù hợp với bộ lọc hiện tại. Hãy đổi bộ thẻ, cấp độ hoặc giảm điều kiện lọc.",
   showActions = false,
   onRemoveWord,
-  onPrioritizeWord
+  onPrioritizeWord,
+  onPracticeWordsUpdate
 }: WritingPreviewTableProps) {
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tierFilter, setTierFilter] = useState('all');
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedWordIds, setSelectedWordIds] = useState<Set<string>>(new Set());
+
+  // Count tiers based on ALL words
+  const tierCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: words.length,
+      mastered: 0,
+      familiar: 0,
+      learning: 0,
+      not_started: 0
+    };
+    
+    words.forEach(w => {
+      const overall = safeNumber(w.overall);
+      const tier = getMasteryTier(overall);
+      counts[tier] = (counts[tier] || 0) + 1;
+    });
+    
+    return counts;
+  }, [words]);
+
+  // Filtered words
+  const filteredWords = useMemo(() => {
+    let result = words;
+    
+    // Tier filter
+    if (tierFilter !== 'all') {
+      result = result.filter(w => getMasteryTier(safeNumber(w.overall)) === tierFilter);
+    }
+    
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter(w => {
+        const wordMatch = w.word?.toLowerCase().includes(query);
+        const meaningMatch = w.meanings?.some((m: string) => m.toLowerCase().includes(query));
+        return wordMatch || meaningMatch;
+      });
+    }
+    
+    return result;
+  }, [words, tierFilter, searchQuery]);
+
+  // Final practice words
+  const finalPracticeWords = useMemo(() => {
+    if (isSelectionMode && selectedWordIds.size > 0) {
+      return words.filter(w => selectedWordIds.has(w._id || w.id));
+    }
+    return filteredWords;
+  }, [words, filteredWords, isSelectionMode, selectedWordIds]);
+
+  // Clean up selected IDs if words are removed from original list
+  useEffect(() => {
+    const validIds = new Set(words.map(w => w._id || w.id));
+    setSelectedWordIds(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of next) {
+        if (!validIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [words]);
+
+  // Notify parent
+  useEffect(() => {
+    if (onPracticeWordsUpdate) {
+      onPracticeWordsUpdate(finalPracticeWords);
+    }
+  }, [finalPracticeWords, onPracticeWordsUpdate]);
 
   if (loading) {
     return (
@@ -54,16 +149,6 @@ export default function WritingPreviewTable({
     );
   }
 
-  const getTierLabel = (tier: string, overall: number) => {
-    if (overall === 0) return { text: 'Chưa bắt đầu', color: '#6b7280' };
-    switch (tier) {
-      case 'mastered': return { text: 'Thành thạo', color: '#22c55e' };
-      case 'familiar': return { text: 'Quen thuộc', color: '#3b82f6' };
-      case 'learning': return { text: 'Đang học', color: '#f59e0b' };
-      default: return { text: 'Chưa bắt đầu', color: '#6b7280' };
-    }
-  };
-
   const getStatusByOverall = (overall: number, writing: number) => {
     if (overall === 0) return { text: 'Chưa bắt đầu', color: '#6b7280' };
     if (writing < 40) return { text: 'Cần luyện viết', color: '#ef4444' };
@@ -71,12 +156,102 @@ export default function WritingPreviewTable({
     return { text: 'Ổn định', color: '#22c55e' };
   };
 
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const newSelected = new Set(selectedWordIds);
+      filteredWords.forEach(w => newSelected.add(w._id || w.id));
+      setSelectedWordIds(newSelected);
+    } else {
+      const newSelected = new Set(selectedWordIds);
+      filteredWords.forEach(w => newSelected.delete(w._id || w.id));
+      setSelectedWordIds(newSelected);
+    }
+  };
+
+  const handleSelectWord = (id: string) => {
+    const next = new Set(selectedWordIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedWordIds(next);
+  };
+
+  const isAllFilteredSelected = filteredWords.length > 0 && filteredWords.every(w => selectedWordIds.has(w._id || w.id));
+  const isSomeFilteredSelected = filteredWords.some(w => selectedWordIds.has(w._id || w.id));
+
   return (
     <div className="wpt-container">
+      {/* FILTER BAR */}
+      <div className="wpt-filter-bar">
+        <div className="wpt-search-wrapper">
+          <input 
+            type="text" 
+            className="wpt-search-input" 
+            placeholder="Tìm từ vựng..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="wpt-tier-pills">
+          {TIER_CONFIG.map(tier => (
+            <button
+              key={tier.id}
+              className={`wpt-pill ${tierFilter === tier.id ? 'active' : ''}`}
+              style={{ 
+                '--pill-color': tier.color, 
+                borderColor: tierFilter === tier.id ? tier.color : 'var(--border)',
+                backgroundColor: tierFilter === tier.id ? `${tier.color}15` : 'var(--bg-card)',
+                color: tierFilter === tier.id ? tier.color : 'var(--text-secondary)'
+              } as React.CSSProperties}
+              onClick={() => setTierFilter(tier.id)}
+            >
+              <span className="wpt-pill-dot" style={{ backgroundColor: tier.color }}></span>
+              {tier.label} ({tierCounts[tier.id]})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* HEADER BAR */}
+      <div className="wpt-header-bar">
+        <div className="wpt-results-info">
+          Hiển thị <strong>{filteredWords.length}</strong> / <strong>{words.length}</strong> kết quả
+          {selectedWordIds.size > 0 && (
+            <span className="wpt-selected-count"> · Đã chọn {selectedWordIds.size}</span>
+          )}
+        </div>
+        <button 
+          className={`wpt-btn-toggle ${isSelectionMode ? 'active' : ''}`}
+          onClick={() => {
+            if (isSelectionMode) {
+              setSelectedWordIds(new Set());
+            }
+            setIsSelectionMode(!isSelectionMode);
+          }}
+        >
+          {isSelectionMode ? '✓ Hủy chọn' : '✓ Chọn nhiều'}
+        </button>
+      </div>
+
+      {/* TABLE */}
       <div className="wpt-table-scroll">
         <table className="wpt-table">
           <thead>
             <tr>
+              {isSelectionMode && (
+                <th className="wpt-col-checkbox">
+                  <input 
+                    type="checkbox" 
+                    checked={isAllFilteredSelected}
+                    ref={input => {
+                      if (input) input.indeterminate = !isAllFilteredSelected && isSomeFilteredSelected;
+                    }}
+                    onChange={handleSelectAll}
+                  />
+                </th>
+              )}
               <th className="wpt-col-vocab">TỪ VỰNG</th>
               <th className="wpt-col-level">LEVEL</th>
               <th className="wpt-col-mastery">ĐỘ THÔNG THẠO</th>
@@ -85,7 +260,13 @@ export default function WritingPreviewTable({
             </tr>
           </thead>
           <tbody>
-            {words.map((w, idx) => {
+            {filteredWords.length === 0 ? (
+              <tr>
+                <td colSpan={isSelectionMode ? 6 : 5} className="wpt-empty-row">
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : filteredWords.map((w, idx) => {
               const recall = safeNumber(w.skills?.recall || w.recall);
               const listening = safeNumber(w.skills?.listening || w.listening);
               const writing = safeNumber(w.skills?.writing || w.writing);
@@ -93,9 +274,26 @@ export default function WritingPreviewTable({
               const overall = safeNumber(w.overall);
               
               const statusInfo = getStatusByOverall(overall, writing);
+              const isSelected = selectedWordIds.has(w._id || w.id);
 
               return (
-                <tr key={w._id || w.id || idx} className="wpt-row">
+                <tr 
+                  key={w._id || w.id || idx} 
+                  className={`wpt-row ${isSelected ? 'wpt-row-selected' : ''}`}
+                  onClick={() => {
+                    if (isSelectionMode) handleSelectWord(w._id || w.id);
+                  }}
+                  style={{ cursor: isSelectionMode ? 'pointer' : 'default' }}
+                >
+                  {isSelectionMode && (
+                    <td className="wpt-col-checkbox">
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected}
+                        readOnly
+                      />
+                    </td>
+                  )}
                   <td className="wpt-col-vocab">
                     <div className="wpt-vocab-word">{w.word}</div>
                     {w.pronunciation && <div className="wpt-vocab-pron">/{w.pronunciation}/</div>}

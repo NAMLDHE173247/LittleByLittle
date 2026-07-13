@@ -115,8 +115,6 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
   // ── Setup state ──
   const [started, setStarted] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [wordCount, setWordCount] = useState(4)
-  const [customWordCount, setCustomWordCount] = useState('')
   const [sourceMode, setSourceMode] = useState('lowest_score')
   const [filterDeck, setFilterDeck] = useState('')
   const [enableRepeat, setEnableRepeat] = useState(true)
@@ -124,6 +122,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
 
   // ── Preview state ──
   const [previewWords, setPreviewWords] = useState<VocabItem[]>([])
+  const [finalWords, setFinalWords] = useState<VocabItem[]>([])
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
 
@@ -179,9 +178,6 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
       return
     }
     
-    const count = customWordCount ? parseInt(customWordCount) : wordCount
-    if (!count || count < 1) return
-
     setLoadingPreview(true)
     setPreviewError(null)
 
@@ -190,7 +186,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
     const fetchPreview = async () => {
       try {
         const url = new URL(`${PROGRESS_API_URL}/practice-words`, window.location.origin)
-        url.searchParams.append('count', count.toString())
+        url.searchParams.append('count', '100') // Fetch up to 100 words for the preview list
         url.searchParams.append('mode', sourceMode)
         url.searchParams.append('tier', 'all')
         if (filterDeck) url.searchParams.append('deckId', filterDeck)
@@ -219,7 +215,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
       clearTimeout(timer)
       ac.abort()
     }
-  }, [started, wordCount, customWordCount, sourceMode, filterDeck, authHeaders, initialWords])
+  }, [started, sourceMode, filterDeck, authHeaders, initialWords])
 
   const speakWord = useCallback((text: string) => {
     window.speechSynthesis.cancel()
@@ -242,12 +238,12 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
 
   // ── START ──
   const startPractice = async () => {
-    if (!previewWords || previewWords.length === 0) {
-      toast.error('Không tìm thấy từ vựng nào phù hợp!')
+    if (!finalWords || finalWords.length === 0) {
+      toast.error('Không có từ nào phù hợp với bộ lọc hiện tại.')
       return
     }
 
-    const words = previewWords
+    const words = finalWords.slice(0, 4)
     setAllWords(words)
     setTotalWords(words.length)
     
@@ -542,30 +538,6 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
               </div>
 
               <div className="writing-setup-section">
-                <label className="ws-label">Số lượng từ</label>
-                <div className="ws-count-row">
-                  {[4, 8, 12, 20].map(n => (
-                    <button
-                      key={n}
-                      className={`ws-count-btn ${wordCount === n && !customWordCount ? 'active' : ''}`}
-                      onClick={() => { setWordCount(n); setCustomWordCount('') }}
-                    >
-                      {n} từ
-                    </button>
-                  ))}
-                </div>
-                <div className="ws-custom-input">
-                  <span>Khác:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    placeholder="Nhập số..."
-                    value={customWordCount}
-                    onChange={e => setCustomWordCount(e.target.value)}
-                  />
-                </div>
-
                 <div style={{ marginTop: 20, padding: '14px', background: 'rgba(139,92,246,0.06)', borderRadius: '12px', border: '1px solid rgba(139,92,246,0.2)' }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed', marginBottom: 8 }}>💡 Cách hoạt động</p>
                   <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
@@ -576,8 +548,8 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
             </div>
 
             <div className="writing-setup-footer">
-              <button className="ws-start-btn" onClick={startPractice} disabled={loadingPreview}>
-                {loadingPreview ? 'Đang tải...' : 'Bắt đầu Writing'}
+              <button className="ws-start-btn" onClick={startPractice} disabled={loadingPreview || finalWords.length === 0}>
+                {loadingPreview ? 'Đang tải...' : `Bắt đầu Writing · ${Math.min(4, finalWords.length)} từ`}
                 <PlayIcon className="icon" />
               </button>
             </div>
@@ -597,6 +569,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
               loading={loadingPreview} 
               error={previewError}
               emptyMessage="Không có từ phù hợp với bộ lọc hiện tại. Hãy đổi bộ thẻ, cấp độ hoặc giảm điều kiện lọc."
+              onPracticeWordsUpdate={setFinalWords}
             />
           </div>
         </div>
@@ -791,8 +764,11 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
                 {/* Form: Correcting */}
                 {(typingPhase === 'correcting' || typingPhase === 'done') && (
                   <form className="wp-type-form" onSubmit={handleCorrection}>
-                    <div className="wp-feedback incorrect" style={{ marginBottom: 12 }}>
-                       <XMarkIcon className="icon icon-inline"/> Đáp án đúng: <strong>{formatForDisplay(current.vocab.word)}</strong>
+                    <div className="wp-correction-box">
+                      <div className="wpc-wrong">{typingInput}</div>
+                      <div className="wpc-correct">
+                         <XMarkIcon className="icon icon-inline"/> Đáp án đúng: <strong>{formatForDisplay(current.vocab.word)}</strong>
+                      </div>
                     </div>
                     
                     <input
@@ -805,6 +781,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
                       disabled={typingPhase === 'done'}
                       autoComplete="off"
                       spellCheck={false}
+                      style={{ marginTop: 8 }}
                     />
                     
                     <button

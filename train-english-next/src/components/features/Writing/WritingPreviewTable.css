@@ -1,8 +1,8 @@
 .wpt-container {
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   border-radius: 16px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  border: 1px solid var(--border-color, #e5e7eb);
+  border: 1px solid var(--border);
   overflow: hidden;
   font-family: var(--font-sans);
 }
@@ -10,13 +10,13 @@
 .wpt-loading, .wpt-error, .wpt-empty {
   padding: 40px;
   text-align: center;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   font-size: 15px;
 }
 
 .wpt-spinner {
   border: 3px solid rgba(0, 0, 0, 0.1);
-  border-top: 3px solid var(--primary, #8b5cf6);
+  border-top: 3px solid var(--primary);
   border-radius: 50%;
   width: 24px;
   height: 24px;
@@ -36,23 +36,23 @@
 .wpt-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 700px;
+  min-width: 900px;
 }
 
 .wpt-table th {
-  background-color: var(--bg-secondary, #f9fafb);
-  color: var(--text-secondary, #6b7280);
+  background-color: var(--bg-row-hover);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 14px 16px;
   text-align: left;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  border-bottom: 1px solid var(--border);
 }
 
 .wpt-row {
-  border-bottom: 1px solid var(--border-color, #f3f4f6);
+  border-bottom: 1px solid var(--border);
   transition: background-color 0.2s ease;
 }
 
@@ -61,7 +61,7 @@
 }
 
 .wpt-row:hover {
-  background-color: var(--bg-hover, #f9fafb);
+  background-color: var(--bg-row-hover);
 }
 
 .wpt-row td {
@@ -69,16 +69,15 @@
   vertical-align: middle;
 }
 
-/* Columns */
 .wpt-col-vocab {
-  width: 40%;
+  width: 30%;
 }
 .wpt-col-level {
-  width: 10%;
+  width: 8%;
   text-align: center;
 }
 .wpt-col-mastery {
-  width: 35%;
+  width: 47%;
 }
 .wpt-col-status {
   width: 15%;
@@ -89,58 +88,54 @@
   text-align: right;
 }
 
-/* Vocab Cell */
 .wpt-vocab-word {
   font-weight: 700;
   font-size: 15px;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
 .wpt-vocab-pron {
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   font-style: italic;
   margin-bottom: 4px;
 }
 
 .wpt-vocab-meaning {
   font-size: 14px;
-  color: var(--text-secondary, #4b5563);
+  color: var(--text-secondary);
 }
 
-/* Level Badge */
 .wpt-level-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background-color: #e0e7ff;
-  color: #4f46e5;
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
   font-weight: 700;
 }
 
-/* Mastery Grid */
 .wpt-mastery-grid {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 240px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  max-width: 100%;
 }
 
 .wpt-mastery-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 calc(25% - 16px);
+  min-width: 80px;
 }
 
 .wpt-m-label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   width: 20px;
   text-align: right;
 }
@@ -148,7 +143,7 @@
 .wpt-m-bar-wrap {
   flex: 1;
   height: 6px;
-  background-color: var(--bg-secondary, #e5e7eb);
+  background-color: var(--border);
   border-radius: 99px;
   overflow: hidden;
 }
@@ -161,13 +156,13 @@
 .wpt-m-val {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   width: 24px;
   text-align: right;
 }
 
-/* Highlight Writing */
 .wpt-writing-highlight {
+  flex: 1 1 100%;
   background-color: rgba(16, 185, 129, 0.05);
   padding: 4px 8px;
   border-radius: 8px;
@@ -176,26 +171,27 @@
 }
 .wpt-writing-highlight .wpt-m-label {
   width: 44px;
-  color: #10b981;
+  color: var(--stat-green, #10b981);
 }
 
 .wpt-overall-wrap {
+  flex: 1 1 100%;
   margin-top: 4px;
   padding-top: 8px;
-  border-top: 1px dashed var(--border-color, #e5e7eb);
-  justify-content: space-between;
+  border-top: 1px dashed var(--border);
+  justify-content: flex-start;
+  gap: 16px;
 }
 .wpt-overall-wrap .wpt-m-label {
   width: auto;
-  color: var(--text-primary, #374151);
+  color: var(--text-primary);
 }
 .wpt-overall-val {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
 }
 
-/* Status Badge */
 .wpt-status-badge {
   display: inline-flex;
   align-items: center;
@@ -208,7 +204,6 @@
   white-space: nowrap;
 }
 
-/* Actions */
 .wpt-btn {
   background: none;
   border: none;
@@ -218,12 +213,11 @@
   transition: all 0.2s;
 }
 
-.wpt-btn-up { color: #3b82f6; }
-.wpt-btn-up:hover { background-color: #eff6ff; }
-.wpt-btn-del { color: #ef4444; }
-.wpt-btn-del:hover { background-color: #fef2f2; }
+.wpt-btn-up { color: var(--stat-blue); }
+.wpt-btn-up:hover { background-color: var(--bg-row-selected); }
+.wpt-btn-del { color: var(--danger); }
+.wpt-btn-del:hover { background-color: var(--danger-light, rgba(239, 68, 68, 0.1)); }
 
-/* Responsive Mobile Card View */
 @media (max-width: 768px) {
   .wpt-table, .wpt-table thead, .wpt-table tbody, .wpt-table tr, .wpt-table th, .wpt-table td {
     display: block;
@@ -235,9 +229,9 @@
   }
 
   .wpt-row {
-    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    border-bottom: 1px solid var(--border);
     padding: 16px;
-    background-color: var(--bg-card, #ffffff);
+    background-color: var(--bg-card);
   }
 
   .wpt-table td {
@@ -270,8 +264,149 @@
   .wpt-mastery-grid {
     max-width: 100%;
     margin-top: 12px;
-    background: var(--bg-secondary, #f9fafb);
+    background: var(--bg-row-hover);
     padding: 12px;
     border-radius: 8px;
   }
+
+  .wpt-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wpt-tier-pills {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+}
+
+.wpt-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-card);
+}
+
+.wpt-search-wrapper {
+  flex-shrink: 0;
+}
+
+.wpt-search-input {
+  width: 200px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.wpt-search-input:focus {
+  border-color: var(--accent);
+  background-color: var(--bg-card);
+}
+
+.wpt-tier-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.wpt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.wpt-pill:hover {
+  background: var(--bg-row-hover);
+}
+
+.wpt-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.wpt-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.wpt-results-info {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.wpt-results-info strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.wpt-selected-count {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.wpt-btn-toggle {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wpt-btn-toggle:hover {
+  background-color: var(--bg-row-selected);
+}
+
+.wpt-btn-toggle.active {
+  background-color: var(--bg-row-selected);
+  border-color: var(--accent);
+}
+
+.wpt-col-checkbox {
+  width: 40px;
+  text-align: center;
+}
+
+.wpt-col-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.wpt-row-selected {
+  background-color: var(--bg-row-selected) !important;
+}
+
+.wpt-empty-row {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-secondary);
+  font-size: 15px;
 }
