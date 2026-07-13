@@ -2,15 +2,33 @@
 
 /* ── Study Mode Button Bar ── */
 .fc-mode-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 20px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .fc-mode-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.fc-quiz-area {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .fc-mode-bar {
+    grid-template-columns: 1fr;
+  }
 }
 
 .fc-mode-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   padding: 10px 16px;
   background: var(--bg-card);
@@ -30,6 +48,17 @@
   border-color: var(--accent);
   color: var(--accent);
   box-shadow: var(--shadow-card-hover);
+}
+
+.fc-mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: var(--shadow-card-hover);
+}
+
+.fc-mode-btn.active .fc-mode-icon {
+  stroke: white;
 }
 
 .fc-mode-icon {

@@ -14,6 +14,8 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/AuthContext'
+import { checkAnswer, formatForDisplay, normalizeForComparison } from '@/lib/utils/answerUtils'
+import WritingPreviewTable from './WritingPreviewTable'
 import './WritingMode.css'
 
 // ===== TYPES =====
@@ -68,64 +70,8 @@ function getWordId(vocab: VocabItem): string {
   return vocab._id ?? vocab.id ?? vocab.wordId ?? ''
 }
 
-/** Dùng để SO SÁNH — không hiển thị */
-function normalizeForComparison(s: string): string {
-  return s
-    .normalize('NFKC')                    // Unicode chuẩn hóa trước
-    .trim()
-    .toLowerCase()
-    .replace(/[‘’‛`´]/g, "'")            // smart single quote → thẳng
-    .replace(/[“”„‟]/g, '"')            // smart double quote → thẳng
-    .replace(/\s+/g, ' ')               // nhiều khoảng trắng → 1
-}
-
-/** Dùng để HIỂN THỊ — giữ nguyên format gốc */
-function formatForDisplay(s: string): string {
-  return s.trim()
-}
-
-function levenshtein(a: string, b: string): number {
-  const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null))
-  for (let i = 0; i <= a.length; i++) matrix[0][i] = i
-  for (let j = 0; j <= b.length; j++) matrix[j][0] = j
-  for (let j = 1; j <= b.length; j++) {
-    for (let i = 1; i <= a.length; i++) {
-      const indicator = a[i - 1] === b[j - 1] ? 0 : 1
-      matrix[j][i] = Math.min(
-        matrix[j][i - 1] + 1, // insertion
-        matrix[j - 1][i] + 1, // deletion
-        matrix[j - 1][i - 1] + indicator // substitution
-      )
-    }
-  }
-  return matrix[b.length][a.length]
-}
-
 function getValidAnswers(vocab: VocabItem): string[] {
   return [vocab.word]
-}
-
-function checkAnswer(input: string, vocab: VocabItem): {
-  isCorrect: boolean
-  isNearMiss: boolean
-  nearMissTarget?: string
-} {
-  const normInput = normalizeForComparison(input)
-  const validAnswers = getValidAnswers(vocab).map(normalizeForComparison)
-
-  if (validAnswers.includes(normInput)) {
-    return { isCorrect: true, isNearMiss: false }
-  }
-
-  const minDist = Math.min(...validAnswers.map(a => levenshtein(normInput, a)))
-  const shortestValidLen = Math.min(...validAnswers.map(a => a.length))
-  const isNearMiss = shortestValidLen >= 4 && minDist === 1
-
-  return {
-    isCorrect: false,
-    isNearMiss,
-    nearMissTarget: isNearMiss ? getValidAnswers(vocab)[0] : undefined
-  }
 }
 
 function buildHintDisplay(word: string, hintLevel: number): string {
@@ -176,6 +122,11 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
   const [enableRepeat, setEnableRepeat] = useState(true)
   const [hasAutoStarted, setHasAutoStarted] = useState(false)
 
+  // ── Preview state ──
+  const [previewWords, setPreviewWords] = useState<VocabItem[]>([])
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+
   // ── Practice state ──
   const [allWords, setAllWords] = useState<VocabItem[]>([])
   const [queue, setQueue] = useState<WordState[]>([])
@@ -219,6 +170,57 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
     return () => clearAllTimers()
   }, [clearAllTimers])
 
+  // ── Fetch Preview Words ──
+  useEffect(() => {
+    if (started || (initialWords && initialWords.length > 0)) {
+      if (initialWords && initialWords.length > 0) {
+        setPreviewWords(initialWords)
+      }
+      return
+    }
+    
+    const count = customWordCount ? parseInt(customWordCount) : wordCount
+    if (!count || count < 1) return
+
+    setLoadingPreview(true)
+    setPreviewError(null)
+
+    const ac = new AbortController()
+    
+    const fetchPreview = async () => {
+      try {
+        const url = new URL(`${PROGRESS_API_URL}/practice-words`, window.location.origin)
+        url.searchParams.append('count', count.toString())
+        url.searchParams.append('mode', sourceMode)
+        url.searchParams.append('tier', 'all')
+        if (filterDeck) url.searchParams.append('deckId', filterDeck)
+
+        const res = await fetch(url.toString(), { headers: authHeaders(), signal: ac.signal })
+        const json = await res.json()
+        if (json.success && json.data) {
+          setPreviewWords(json.data)
+        } else {
+          setPreviewError(json.message || 'Lỗi tải danh sách')
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          setPreviewError('Lỗi kết nối server!')
+        }
+      } finally {
+        setLoadingPreview(false)
+      }
+    }
+
+    const timer = setTimeout(() => {
+      fetchPreview()
+    }, 400) // Debounce 400ms
+
+    return () => {
+      clearTimeout(timer)
+      ac.abort()
+    }
+  }, [started, wordCount, customWordCount, sourceMode, filterDeck, authHeaders, initialWords])
+
   const speakWord = useCallback((text: string) => {
     window.speechSynthesis.cancel()
     const utt = new SpeechSynthesisUtterance(text)
@@ -240,54 +242,38 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
 
   // ── START ──
   const startPractice = async () => {
-    const count = customWordCount ? parseInt(customWordCount) : wordCount
-    if (!count || count < 1) return
-    setLoading(true)
-    try {
-      const url = new URL(`${PROGRESS_API_URL}/practice-words`, window.location.origin)
-      url.searchParams.append('count', count.toString())
-      url.searchParams.append('mode', sourceMode)
-      url.searchParams.append('tier', 'all')
-      if (filterDeck) url.searchParams.append('deckId', filterDeck)
-
-      const res = await fetch(url.toString(), { headers: authHeaders() })
-      const json = await res.json()
-      if (json.success && json.data.length > 0) {
-        const words: VocabItem[] = json.data
-        setAllWords(words)
-        setTotalWords(words.length)
-        
-        setPassedIds(new Set())
-        setWrongAttemptsByWord({})
-        setFailedWords([])
-        setFirstAttemptByWord({})
-
-        const initialQueue: WordState[] = words.map(v => ({
-          vocab: v,
-          stage: 'type',
-          hintLevel: 0,
-        }))
-        setQueue(initialQueue)
-        setTypingInput('')
-        setRetypeInput('')
-        setTypingPhase('answering')
-        setNearMissMsg('')
-        
-        clearAllTimers()
-        submitLockRef.current = false
-        correctionLockRef.current = false
-        
-        setChoiceOptions(buildChoiceOptions(words[0], words))
-        setChoiceSelected(null)
-        setStarted(true)
-      } else {
-        toast.error('Không tìm thấy từ vựng nào phù hợp!')
-      }
-    } catch {
-      toast.error('Lỗi kết nối server!')
-    } finally {
-      setLoading(false)
+    if (!previewWords || previewWords.length === 0) {
+      toast.error('Không tìm thấy từ vựng nào phù hợp!')
+      return
     }
+
+    const words = previewWords
+    setAllWords(words)
+    setTotalWords(words.length)
+    
+    setPassedIds(new Set())
+    setWrongAttemptsByWord({})
+    setFailedWords([])
+    setFirstAttemptByWord({})
+
+    const initialQueue: WordState[] = words.map(v => ({
+      vocab: v,
+      stage: 'type',
+      hintLevel: 0,
+    }))
+    setQueue(initialQueue)
+    setTypingInput('')
+    setRetypeInput('')
+    setTypingPhase('answering')
+    setNearMissMsg('')
+    
+    clearAllTimers()
+    submitLockRef.current = false
+    correctionLockRef.current = false
+    
+    setChoiceOptions(buildChoiceOptions(words[0], words))
+    setChoiceSelected(null)
+    setStarted(true)
   }
 
   useEffect(() => {
@@ -375,7 +361,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
     submitLockRef.current = true
 
     const wordId = getWordId(current.vocab)
-    const { isCorrect, isNearMiss, nearMissTarget } = checkAnswer(typingInput, current.vocab)
+    const { isCorrect, isNearMiss, nearMissTarget } = checkAnswer(typingInput, [current.vocab.word])
     const isHinted = current.hintLevel >= 1
     
     // Ghi first attempt
@@ -432,7 +418,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
     if (typingPhase !== 'correcting') return
     if (!retypeInput.trim() || !current) return
 
-    const { isCorrect } = checkAnswer(retypeInput, current.vocab)
+    const { isCorrect } = checkAnswer(retypeInput, [current.vocab.word])
     
     if (isCorrect) {
       correctionLockRef.current = true
@@ -590,11 +576,28 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
             </div>
 
             <div className="writing-setup-footer">
-              <button className="ws-start-btn" onClick={startPractice} disabled={loading}>
-                {loading ? 'Đang tải...' : 'Bắt đầu Writing'}
+              <button className="ws-start-btn" onClick={startPractice} disabled={loadingPreview}>
+                {loadingPreview ? 'Đang tải...' : 'Bắt đầu Writing'}
                 <PlayIcon className="icon" />
               </button>
             </div>
+          </div>
+          
+          <div className="writing-setup-preview" style={{ marginTop: '24px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                Danh sách từ vựng sẽ luyện tập ({previewWords.length} từ)
+              </h3>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                Mỗi từ dưới đây sẽ được đưa vào phiên Writing nếu bạn bấm Bắt đầu.
+              </p>
+            </div>
+            <WritingPreviewTable 
+              words={previewWords} 
+              loading={loadingPreview} 
+              error={previewError}
+              emptyMessage="Không có từ phù hợp với bộ lọc hiện tại. Hãy đổi bộ thẻ, cấp độ hoặc giảm điều kiện lọc."
+            />
           </div>
         </div>
       </div>

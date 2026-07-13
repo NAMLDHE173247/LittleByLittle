@@ -22,6 +22,7 @@ export default function DeckMasteryRoute() {
   // Flashcard words
   const [allWords, setAllWords] = useState<any[]>([]);
   const [loadingWords, setLoadingWords] = useState(true);
+  const [activeMode, setActiveMode] = useState<string>('learn');
 
   useEffect(() => {
     if (!deckId) return;
@@ -144,11 +145,11 @@ export default function DeckMasteryRoute() {
 
       {!loadingWords && allWords.length > 0 && (
         <div className="deck-fc-wrapper" style={{ marginBottom: "40px" }}>
-          <FlashcardsPage vocabularies={allWords} submitProgress={submitProgress} />
+          <FlashcardsPage vocabularies={allWords} submitProgress={submitProgress} onModeChange={setActiveMode} />
         </div>
       )}
 
-      <DeckMasteryView deckId={deckId} />
+      {activeMode === 'learn' && <DeckMasteryView deckId={deckId} />}
     </div>
   );
 }

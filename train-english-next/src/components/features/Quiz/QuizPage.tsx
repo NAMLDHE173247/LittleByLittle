@@ -14,6 +14,7 @@ import {
   LightBulbIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
+import { checkAnswer } from '@/lib/utils/answerUtils'
 
 // ===== TYPES =====
 interface DeckRef {
@@ -65,6 +66,7 @@ interface QuizSettings {
   filterTier: string
   sourceMode: string
   filterStarredOnly?: boolean
+  requireRetypeOnWrong: boolean
 }
 
 interface QuizQuestion {
@@ -99,6 +101,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 function buildQuestions(
   words: VocabularyItem[],
   settings: QuizSettings,
+  allVocabularies: VocabularyItem[]
 ): QuizQuestion[] {
   const pool = settings.shuffle ? shuffleArray(words) : [...words]
   const count = Math.min(settings.questionCount, pool.length)
@@ -119,22 +122,54 @@ function buildQuestions(
       ? vocab.meanings.join(', ')
       : vocab.word
 
-    // Build 4 options for multiple/listen
+    // Build options for multiple/listen
     let options: string[] = []
     let correctIdx = 0
 
     if (type === 'multiple' || type === 'listen') {
-      const others = words.filter(w => w._id !== vocab._id)
-      const picked = shuffleArray(others).slice(0, 3)
-      const wrongs = picked.map(w =>
-        settings.mode === 'en2vi' ? w.meanings.join(', ') : w.word
-      )
-      // Place correct answer at random position
-      correctIdx = Math.floor(Math.random() * 4)
+      const normalize = (str: string) => str.toLowerCase().trim()
+      const correctAnsNorm = normalize(correctAnswer)
+      
+      // Filter out words that have the same answer text
+      const validWrongs = allVocabularies.filter(w => {
+        const wId = w._id || (w as any).wordId
+        const vId = vocab._id || (vocab as any).wordId
+        if (wId === vId) return false
+        const wAns = settings.mode === 'en2vi' ? w.meanings?.join(', ') : w.word
+        if (!wAns) return false
+        if (normalize(wAns) === correctAnsNorm) return false
+        return true
+      })
+      
+      // Dedupe wrong answers so we don't show the same wrong answer twice
+      const uniqueWrongsMap = new Map<string, string>()
+      validWrongs.forEach(w => {
+        const wAns = settings.mode === 'en2vi' ? w.meanings?.join(', ') : w.word
+        if (!wAns) return
+        const norm = normalize(wAns)
+        if (!uniqueWrongsMap.has(norm)) {
+          uniqueWrongsMap.set(norm, wAns)
+        }
+      })
+      let distinctWrongAnswers = Array.from(uniqueWrongsMap.values())
+      
+      // Fallback if dedupe is too aggressive
+      if (distinctWrongAnswers.length < 3) {
+        const vId = vocab._id || (vocab as any).wordId
+        const others = allVocabularies.filter(w => (w._id || (w as any).wordId) !== vId)
+        distinctWrongAnswers = others.map(w => settings.mode === 'en2vi' ? w.meanings?.join(', ') || '' : w.word).filter(Boolean)
+      }
+
+      const actualWrongs = Math.min(distinctWrongAnswers.length, 3)
+      const picked = shuffleArray(distinctWrongAnswers).slice(0, actualWrongs)
+      
+      const totalOptions = actualWrongs + 1
+      correctIdx = Math.floor(Math.random() * totalOptions)
+      
       let wi = 0
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < totalOptions; i++) {
         if (i === correctIdx) options.push(correctAnswer)
-        else { options.push(wrongs[wi] || '—'); wi++ }
+        else { options.push(picked[wi]); wi++ }
       }
     }
 
@@ -154,12 +189,14 @@ const defaultSettings: QuizSettings = {
   filterTopic: '',
   filterPOS: '',
   filterTier: 'all',
-  sourceMode: 'random'
+  sourceMode: 'random',
+  requireRetypeOnWrong: false
 }
 
 // ===== COMPONENT =====
 export default function QuizPage({ vocabularies, decks, masteryWords, onExit, onEditWord, speak, submitProgress }: QuizPageProps) {
   const [settings, setSettings] = useState<QuizSettings>({ ...defaultSettings })
+  const [activeSettings, setActiveSettings] = useState<QuizSettings | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [started, setStarted] = useState(false)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
@@ -170,6 +207,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   const [totalAnswered, setTotalAnswered] = useState(0)
   const [starred, setStarred] = useState<Set<number>>(new Set())
   const [fillInput, setFillInput] = useState('')
+  const [fillNearMissMsg, setFillNearMissMsg] = useState('')
   const [fillCorrect, setFillCorrect] = useState<boolean | null>(null)
   const [wrongAnswers, setWrongAnswers] = useState<number[]>([])
   const [showReview, setShowReview] = useState(false)
@@ -200,7 +238,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
       if (settings.filterPOS && v.partOfSpeech !== settings.filterPOS) return false
 
       if (settings.filterTier && settings.filterTier !== 'all') {
-        const mw = progressMap.get(v._id)
+        const vId = v._id || (v as any).wordId
+        const mw = progressMap.get(vId)
         const overall = mw?.overall || 0
         let tier = "not_started"
         if (overall >= 80) tier = "mastered"
@@ -226,7 +265,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     } else if (settings.sourceMode === 'overdue') {
       const now = new Date().getTime()
       result = result.filter(v => {
-        const mw = progressMap.get(v._id)
+        const vId = v._id || (v as any).wordId
+        const mw = progressMap.get(vId)
         if (!mw) return false
         const isDecaying = (mw.skills?.recall?.nextReview && new Date(mw.skills.recall.nextReview).getTime() <= now && mw.skills.recall.points > 0) ||
           (mw.skills?.listening?.nextReview && new Date(mw.skills.listening.nextReview).getTime() <= now && mw.skills.listening.points > 0) ||
@@ -268,19 +308,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   }, [currentIdx, started, questions, answered])
 
   const startQuiz = useCallback(() => {
-    if (filteredWords.length < 4 && settings.questionTypes.some(t => t !== 'fill')) {
-      // Need at least 4 words for multiple choice
-      // If only fill mode, need at least 1
-      if (filteredWords.length < 1) return
-    }
+    // Allow starting with at least 1 word for multiple/listen too
     if (filteredWords.length < 1) return
 
-    const effectiveCount = settings.questionCount > filteredWords.length
-      ? filteredWords.length
-      : settings.questionCount
-
-    const qs = buildQuestions(filteredWords, { ...settings, questionCount: effectiveCount })
+    const qs = buildQuestions(filteredWords, settings, vocabularies)
     setQuestions(qs)
+    setActiveSettings(settings)
     setCurrentIdx(0)
     setSelected(null)
     setAnswered(false)
@@ -293,7 +326,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setHintUsed(false)
     setShowHintText(false)
     setStarted(true)
-  }, [filteredWords, settings])
+  }, [filteredWords, settings, vocabularies])
 
   const handleRestart = () => {
     setStarted(false)
@@ -316,10 +349,13 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setSelected(null)
     setAnswered(false)
     setFillInput('')
+    setFillNearMissMsg('')
     setFillCorrect(null)
     setHintUsed(false)
     setShowHintText(false)
   }, [])
+
+  const handleNext = goNext
 
   const scheduleAutoNext = useCallback(() => {
     if (settings.autoNext) {
@@ -338,18 +374,20 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     const isCorrect = idx === q.correctIdx
     const skill = q.type === 'listen' ? 'listening' : 'recall'
 
+    if (submitProgress) {
+      const vId = q.vocab._id || (q.vocab as any).wordId
+      submitProgress(vId, skill, isCorrect, hintUsed)
+    }
+
     if (isCorrect) {
       if (hintUsed) {
-        if (submitProgress) submitProgress(q.vocab._id, skill, true, true)
         toast.info("Chính xác! (Câu này không được cộng điểm vì đã dùng gợi ý 💡)")
         setQuestions(prev => [...prev, q])
       } else {
-        if (submitProgress) submitProgress(q.vocab._id, skill, true, false)
         setCorrectCount(prev => prev + 1)
       }
       scheduleAutoNext()
     } else {
-      if (submitProgress) submitProgress(q.vocab._id, skill, false, false)
       setWrongAnswers(prev => [...prev, currentIdx])
       setQuestions(prev => [...prev, q])
     }
@@ -366,47 +404,57 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     const q = questions[currentIdx]
     const skill = q.type === 'listen' ? 'listening' : q.type === 'fill' ? 'writing' : 'recall'
     if (submitProgress) {
-      submitProgress(q.vocab._id, skill, false, false)
+      const vId = q.vocab._id || (q.vocab as any).wordId
+      submitProgress(vId, skill, false, false)
     }
     setQuestions(prev => [...prev, q])
   }
 
   // ---- Fill-in-blank Handler ----
   const handleFillSubmit = () => {
-    if (answered || !fillInput.trim()) return
+    if (answered && !(activeSettings?.requireRetypeOnWrong && fillCorrect === false)) return
+    if (!fillInput.trim()) return
+
     const q = questions[currentIdx]
-    const userAnswer = fillInput.trim().toLowerCase()
-    const correct = q.correctAnswer.toLowerCase()
-    // Also check individual meanings for en2vi
-    let isCorrect = userAnswer === correct
-    if (!isCorrect && settings.mode === 'en2vi') {
-      isCorrect = q.vocab.meanings.some(m => m.toLowerCase() === userAnswer)
-    }
-    if (!isCorrect && settings.mode === 'vi2en') {
-      // Check synonyms too
-      isCorrect = q.vocab.synonyms.some(s => s.toLowerCase() === userAnswer)
-    }
+    const activeMode = activeSettings?.mode || settings.mode
+    
+    let validAnswers = [q.correctAnswer]
+    if (activeMode === 'en2vi') validAnswers = [...validAnswers, ...q.vocab.meanings]
+    if (activeMode === 'vi2en') validAnswers = [...validAnswers, ...(q.vocab.synonyms || [])]
 
-    setFillCorrect(isCorrect)
-    setAnswered(true)
-    setTotalAnswered(prev => prev + 1)
+    const { isCorrect, isNearMiss } = checkAnswer(fillInput, validAnswers)
 
-    const skill = 'writing'
-    if (isCorrect) {
-      if (hintUsed) {
-        if (submitProgress) submitProgress(q.vocab._id, skill, true, true)
-        toast.info("Chính xác! (Câu này không được cộng điểm vì đã dùng gợi ý 💡)")
-        setQuestions(prev => [...prev, q])
-      } else {
-        if (submitProgress) submitProgress(q.vocab._id, skill, true, false)
-        setCorrectCount(prev => prev + 1)
+    if (answered && activeSettings?.requireRetypeOnWrong && fillCorrect === false) {
+      if (isCorrect) {
+        setFillNearMissMsg('')
+        handleNext()
       }
-      scheduleAutoNext()
-    } else {
-      if (submitProgress) submitProgress(q.vocab._id, skill, false, false)
-      setWrongAnswers(prev => [...prev, currentIdx])
-      setQuestions(prev => [...prev, q])
+      return
     }
+
+    if (isNearMiss && !isCorrect) {
+      setFillNearMissMsg('Gần đúng, kiểm tra lại chính tả.')
+      return
+    }
+
+    setFillNearMissMsg('')
+    setAnswered(true)
+    setFillCorrect(isCorrect)
+
+    const vId = q.vocab._id || (q.vocab as any).wordId
+    const skill = q.type === 'listen' ? 'listening' : q.type === 'fill' ? 'writing' : 'recall'
+
+    if (isCorrect) {
+      setCorrectCount(prev => prev + 1)
+      if (submitProgress) submitProgress(vId, skill, true, hintUsed)
+      if (activeSettings?.autoNext) {
+        autoNextTimer.current = setTimeout(handleNext, 1000)
+      }
+    } else {
+      setWrongAnswers(prev => [...prev, currentIdx])
+      if (submitProgress) submitProgress(vId, skill, false, hintUsed)
+    }
+    setTotalAnswered(prev => prev + 1)
   }
 
   // ---- Star toggle ----
@@ -455,26 +503,50 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
         <div className="quiz-review-card">
           <h2 className="quiz-review-title">📝 Các từ cần ôn tập ({wrongQs.length})</h2>
           <div className="quiz-review-list">
-            {wrongQs.map((q, i) => (
-              <div key={i} className="quiz-review-item">
-                <div className="quiz-review-word">
-                  <strong>{q.vocab.word}</strong>
-                  {q.vocab.pronunciation && <span className="quiz-review-pron">{q.vocab.pronunciation}</span>}
-                  <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)}>
-                    <SpeakerWaveIcon className="icon" />
-                  </button>
+            {wrongQs.map((q, i) => {
+              const vId = q.vocab._id || (q.vocab as any).wordId
+              return (
+                <div key={i} className="quiz-review-item">
+                  <div className="quiz-question-prompt">
+                    <h3>{q.questionText}</h3>
+                    {(activeSettings?.mode || settings.mode) === 'en2vi' && q.vocab.pronunciation && (
+                      <p className="quiz-pronunciation">{q.vocab.pronunciation}</p>
+                    )}
+                  </div>
+                  <div className="quiz-review-word">
+                    <strong>{q.vocab.word}</strong>
+                    {q.vocab.pronunciation && <span className="quiz-review-pron">{q.vocab.pronunciation}</span>}
+                    <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)}>
+                      <SpeakerWaveIcon className="icon" />
+                    </button>
+                  </div>
+                  <div className="quiz-review-meaning">{q.vocab.meanings.join(', ')}</div>
+                  {q.vocab.imageUrl && (
+                    <img src={q.vocab.imageUrl} alt="" className="quiz-review-img" onError={e => (e.currentTarget.style.display = 'none')} />
+                  )}
                 </div>
-                <div className="quiz-review-meaning">{q.vocab.meanings.join(', ')}</div>
-                {q.vocab.imageUrl && (
-                  <img src={q.vocab.imageUrl} alt="" className="quiz-review-img" onError={e => (e.currentTarget.style.display = 'none')} />
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
           <div className="quiz-review-actions">
             <button className="btn-primary" onClick={handleRestart}>
               <ArrowPathIcon className="icon icon-inline" /> Làm lại Quiz
             </button>
+            {wrongAnswers.length > 0 && (
+              <button 
+                className="btn-primary" 
+                style={{ background: '#8B5CF6' }}
+                onClick={() => {
+                  const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
+                  const wrongVocabs = wrongQs.map(q => q.vocab)
+                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [v._id || (v as any).wordId, v])).values())
+                  sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
+                  window.location.href = '/writing'
+                }}
+              >
+                <PencilSquareIcon className="icon icon-inline" /> Luyện viết lại các từ sai
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -517,6 +589,23 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
               </button>
             )}
           </div>
+          {wrongAnswers.length > 0 && (
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+              <button 
+                className="btn-primary" 
+                style={{ background: '#8B5CF6' }}
+                onClick={() => {
+                  const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
+                  const wrongVocabs = wrongQs.map(q => q.vocab)
+                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [v._id || (v as any).wordId, v])).values())
+                  sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
+                  window.location.href = '/writing'
+                }}
+              >
+                <PencilSquareIcon className="icon icon-inline" /> Luyện viết lại các từ sai
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -555,7 +644,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
           {!canStart && (
             <p className="quiz-warning">
-              ⚠ Cần ít nhất {needsMultiple ? 4 : 1} từ vựng{settings.filterDeck || settings.filterLevel || settings.filterTopic || settings.filterPOS ? ' (thử bỏ bộ lọc)' : ''}.
+              ⚠ Cần ít nhất 1 từ vựng{settings.filterDeck || settings.filterLevel || settings.filterTopic || settings.filterPOS ? ' (thử bỏ bộ lọc)' : ''}.
             </p>
           )}
 
@@ -586,6 +675,37 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   }
 
   function renderMultipleQuestion() {
+    if (q.options.length === 1) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', margin: '20px 0' }}>
+          <div style={{ fontSize: '18px', fontWeight: '500', color: 'var(--text-primary)', textAlign: 'center' }}>
+            Đáp án: <strong style={{ color: 'var(--accent)', fontSize: '22px' }}>{q.correctAnswer}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
+            {!answered && (
+              <>
+                <button className="btn-outline quiz-dont-know" onClick={handleDontKnow} style={{ width: 'auto' }}>
+                  Tôi không nhớ
+                </button>
+                <button className="btn-primary" onClick={() => {
+                  setAnswered(true)
+                  setSelected(0)
+                  setCorrectCount(c => c + 1)
+                  setTotalAnswered(t => t + 1)
+                  // No submitProgress here to prevent inflating mastery
+                  if (settings.autoNext) {
+                    autoNextTimer.current = setTimeout(goNext, 800)
+                  }
+                }}>
+                  <CheckIcon className="icon icon-inline" /> Tôi đã nhớ
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )
+    }
+
     return (
       <>
         <div className="quiz-options">
@@ -608,7 +728,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
         </div>
         {!answered && (
           <button className="quiz-dont-know" onClick={handleDontKnow}>
-            5. Tôi không biết
+            {q.options.length + 1}. Tôi không biết
           </button>
         )}
       </>
@@ -623,14 +743,25 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             ref={fillInputRef}
             type="text"
             className={`quiz-fill-input ${fillCorrect === true ? 'correct' : fillCorrect === false ? 'wrong' : ''}`}
-            placeholder={settings.mode === 'en2vi' ? 'Nhập nghĩa tiếng Việt...' : 'Nhập từ tiếng Anh...'}
+            placeholder={(activeSettings?.mode || settings.mode) === 'en2vi' ? 'Nhập nghĩa tiếng Việt...' : 'Nhập từ tiếng Anh...'}
             value={fillInput}
-            onChange={e => setFillInput(e.target.value)}
+            onChange={e => {
+              setFillInput(e.target.value)
+              if (fillNearMissMsg) setFillNearMissMsg('')
+            }}
             onKeyDown={e => { if (e.key === 'Enter') handleFillSubmit() }}
-            disabled={answered}
-            autoComplete="off"
-            spellCheck={false}
+            disabled={answered && !(activeSettings?.requireRetypeOnWrong && fillCorrect === false)}
           />
+          {fillNearMissMsg && (
+            <div style={{ color: '#D97706', fontSize: '14px', marginTop: '8px', fontWeight: 500 }}>
+              ⚠ {fillNearMissMsg}
+            </div>
+          )}
+          {answered && activeSettings?.requireRetypeOnWrong && fillCorrect === false && (
+            <div style={{ color: '#DC2626', fontSize: '14px', marginTop: '8px', fontWeight: 500 }}>
+              Hãy gõ lại đáp án đúng để tiếp tục.
+            </div>
+          )}
           {!answered && (
             <button className="quiz-fill-submit" onClick={handleFillSubmit} disabled={!fillInput.trim()}>
               Kiểm tra
@@ -647,9 +778,14 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             <XMarkIcon className="icon" /> Sai rồi! Đáp án đúng: <strong>{q.correctAnswer}</strong>
           </div>
         )}
+        {answered && (!activeSettings?.requireRetypeOnWrong || fillCorrect === true) && !(fillCorrect === true && (activeSettings?.autoNext || settings.autoNext)) && (
+          <button className="btn-primary" onClick={handleNext} style={{ marginTop: '16px' }}>
+            Tiếp tục
+          </button>
+        )}
         {!answered && (
           <button className="quiz-dont-know" onClick={handleDontKnow} style={{ marginTop: 12 }}>
-            Tôi không biết
+            Hiển thị đáp án
           </button>
         )}
       </div>
@@ -666,28 +802,59 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
           </button>
           <p className="quiz-listen-hint">Nghe phát âm và chọn đáp án đúng</p>
         </div>
-        <div className="quiz-options">
-          {q.options.map((opt, idx) => {
-            let cls = 'quiz-option'
-            if (answered) {
-              if (idx === q.correctIdx) cls += ' correct'
-              else if (idx === selected) cls += ' wrong'
-              else cls += ' disabled'
-            }
-            return (
-              <button key={idx} className={cls} onClick={() => handleSelect(idx)} disabled={answered}>
-                <span className="quiz-option-num">{idx + 1}</span>
-                <span className="quiz-option-text">{opt}</span>
-                {answered && idx === q.correctIdx && <CheckIcon className="icon quiz-check-icon" />}
-                {answered && idx === selected && idx !== q.correctIdx && <XMarkIcon className="icon quiz-x-icon" />}
+        {q.options.length === 1 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', margin: '20px 0' }}>
+            <div style={{ fontSize: '18px', fontWeight: '500', color: 'var(--text-primary)', textAlign: 'center' }}>
+              Đáp án: <strong style={{ color: 'var(--accent)', fontSize: '22px' }}>{q.correctAnswer}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
+              {!answered && (
+                <>
+                  <button className="btn-outline quiz-dont-know" onClick={handleDontKnow} style={{ width: 'auto' }}>
+                    Tôi không nhớ
+                  </button>
+                  <button className="btn-primary" onClick={() => {
+                    setAnswered(true)
+                    setSelected(0)
+                    setCorrectCount(c => c + 1)
+                    setTotalAnswered(t => t + 1)
+                    // No submitProgress here to prevent inflating mastery
+                    if (settings.autoNext) {
+                      autoNextTimer.current = setTimeout(goNext, 800)
+                    }
+                  }}>
+                    <CheckIcon className="icon icon-inline" /> Tôi đã nhớ
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="quiz-options">
+              {q.options.map((opt, idx) => {
+                let cls = 'quiz-option'
+                if (answered) {
+                  if (idx === q.correctIdx) cls += ' correct'
+                  else if (idx === selected) cls += ' wrong'
+                  else cls += ' disabled'
+                }
+                return (
+                  <button key={idx} className={cls} onClick={() => handleSelect(idx)} disabled={answered}>
+                    <span className="quiz-option-num">{idx + 1}</span>
+                    <span className="quiz-option-text">{opt}</span>
+                    {answered && idx === q.correctIdx && <CheckIcon className="icon quiz-check-icon" />}
+                    {answered && idx === selected && idx !== q.correctIdx && <XMarkIcon className="icon quiz-x-icon" />}
+                  </button>
+                )
+              })}
+            </div>
+            {!answered && (
+              <button className="quiz-dont-know" onClick={handleDontKnow}>
+                {q.options.length + 1}. Tôi không biết
               </button>
-            )
-          })}
-        </div>
-        {!answered && (
-          <button className="quiz-dont-know" onClick={handleDontKnow}>
-            5. Tôi không biết
-          </button>
+            )}
+          </>
         )}
       </>
     )
@@ -716,9 +883,11 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             {settings.mode === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}
           </strong></>}
         </p>
-        <button className="quiz-continue-btn" onClick={goNext}>
-          Tiếp tục
-        </button>
+        {(!activeSettings?.requireRetypeOnWrong || fillCorrect !== false || q.type !== 'fill') && (
+          <button className="btn-primary" onClick={handleNext}>
+            Tiếp tục
+          </button>
+        )}
       </div>
     )
   }
@@ -727,16 +896,61 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     if (!showSettings) return null
     return (
       <div className="modal-overlay" onClick={() => setShowSettings(false)}>
-        <div className="modal quiz-settings-modal wide-modal" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>Cài đặt Quiz</h2>
-            <button className="modal-close" onClick={() => setShowSettings(false)}>
+        <div className="modal quiz-settings-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header quiz-settings-header">
+            <h3>Cài đặt Quiz</h3>
+            <button className="quiz-close-btn" onClick={() => setShowSettings(false)}>
               <XMarkIcon className="icon" />
             </button>
           </div>
-          <div className="modal-body quiz-settings-grid">
+
+          {(() => {
+            const hasGroupAChanged = started && activeSettings && (
+              settings.mode !== activeSettings.mode ||
+              settings.questionCount !== activeSettings.questionCount ||
+              settings.shuffle !== activeSettings.shuffle ||
+              settings.filterDeck !== activeSettings.filterDeck ||
+              settings.filterLevel !== activeSettings.filterLevel ||
+              settings.filterTopic !== activeSettings.filterTopic ||
+              settings.filterPOS !== activeSettings.filterPOS ||
+              settings.filterTier !== activeSettings.filterTier ||
+              settings.sourceMode !== activeSettings.sourceMode ||
+              settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
+              settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
+              JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
+            )
+
+            const hasGroupBChanged = started && activeSettings && (
+              settings.autoNext !== activeSettings.autoNext
+            )
+
+            if (started && (hasGroupAChanged || hasGroupBChanged)) {
+              return (
+                <div className="quiz-settings-notice" style={{ padding: '12px 24px', backgroundColor: hasGroupAChanged ? '#FEF9C3' : '#DCFCE7', color: hasGroupAChanged ? '#854D0E' : '#166534', fontSize: '14px', borderBottom: hasGroupAChanged ? '1px solid #FEF08A' : '1px solid #BBF7D0' }}>
+                  {hasGroupAChanged ? (
+                    <>⚠ Thay đổi này sẽ áp dụng khi bạn bắt đầu lượt Quiz mới.</>
+                  ) : (
+                    <>✓ Đã áp dụng cho phiên hiện tại.</>
+                  )}
+                </div>
+              )
+            }
+            return null
+          })()}
+
+          <div className="modal-body quiz-settings-body">
             {/* CỘT 1 */}
             <div className="quiz-settings-col">
+              {/* Retype on Wrong */}
+              <label className="ws-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.requireRetypeOnWrong}
+                  onChange={e => setSettings({ ...settings, requireRetypeOnWrong: e.target.checked })}
+                />
+                Bắt buộc gõ lại khi sai (Điền từ)
+              </label>
+
               {/* Answer Mode */}
               <div className="quiz-settings-section">
                 <h4>Hướng hỏi</h4>
@@ -897,9 +1111,38 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             }} style={{ color: '#EF4444' }}>
               <ArrowPathIcon className="icon icon-inline" /> Đặt lại mặc định
             </button>
-            <button className="btn-primary" onClick={() => setShowSettings(false)}>
-              Áp dụng
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(() => {
+                const hasGroupAChanged = started && activeSettings && (
+                  settings.mode !== activeSettings.mode ||
+                  settings.questionCount !== activeSettings.questionCount ||
+                  settings.shuffle !== activeSettings.shuffle ||
+                  settings.filterDeck !== activeSettings.filterDeck ||
+                  settings.filterLevel !== activeSettings.filterLevel ||
+                  settings.filterTopic !== activeSettings.filterTopic ||
+                  settings.filterPOS !== activeSettings.filterPOS ||
+                  settings.filterTier !== activeSettings.filterTier ||
+                  settings.sourceMode !== activeSettings.sourceMode ||
+                  settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
+                  settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
+                  JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
+                )
+                if (hasGroupAChanged) {
+                  return (
+                    <button className="btn-outline" onClick={() => {
+                      setShowSettings(false)
+                      startQuiz()
+                    }}>
+                      Bắt đầu lại Quiz với cài đặt mới
+                    </button>
+                  )
+                }
+                return null
+              })()}
+              <button className="btn-primary" onClick={() => setShowSettings(false)}>
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -993,12 +1236,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '4px' }}>
               <LightBulbIcon className="icon" style={{ width: 18, height: 18 }} /> Gợi ý
             </div>
-            {settings.mode === 'en2vi' 
+            {(activeSettings?.mode || settings.mode) === 'en2vi' 
               ? `Nghĩa của từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...` 
               : `Từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...`}
             {q.vocab.examples?.[0] && (
               <div style={{ marginTop: '4px', fontStyle: 'italic', opacity: 0.9 }}>
-                Ví dụ: "{settings.mode === 'en2vi' ? q.vocab.examples[0].en : q.vocab.examples[0].vi}"
+                Ví dụ: "{(activeSettings?.mode || settings.mode) === 'en2vi' ? q.vocab.examples[0].en : q.vocab.examples[0].vi}"
               </div>
             )}
           </div>

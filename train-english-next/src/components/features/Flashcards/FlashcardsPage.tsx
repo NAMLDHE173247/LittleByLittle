@@ -13,16 +13,29 @@ import {
   BookOpenIcon,
   AcademicCapIcon,
   DocumentCheckIcon,
-  MusicalNoteIcon
+  MusicalNoteIcon,
+  ChatBubbleBottomCenterIcon,
+  ChatBubbleOvalLeftIcon,
+  DocumentTextIcon,
+  QuestionMarkCircleIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline'
+import { toast } from 'sonner'
+import { useGlobalData } from '@/components/providers/GlobalDataProvider'
+import QuizPage from '@/components/features/Quiz/QuizPage'
 import './FlashcardsPage.css'
+
+export type StudyMode = 'learn' | 'quiz' | 'speaking' | 'dialogue' | 'grammar' | 'reading' | 'test' | 'dictation';
 
 interface FlashcardsPageProps {
   vocabularies: any[]
   submitProgress?: (wordId: string, skill: string, isCorrect: boolean) => void
+  onModeChange?: (mode: StudyMode) => void
 }
 
-export default function FlashcardsPage({ vocabularies, submitProgress }: FlashcardsPageProps) {
+export default function FlashcardsPage({ vocabularies, submitProgress, onModeChange }: FlashcardsPageProps) {
+  const [activeMode, setActiveMode] = useState<StudyMode>('learn')
+  const { decks, masteryWords, openEditModal, speak } = useGlobalData()
   const [fcIndex, setFcIndex] = useState(0)
   const [fcFlipped, setFcFlipped] = useState(false)
   const [fcShuffled, setFcShuffled] = useState(false)
@@ -130,13 +143,14 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
   const imgSizeClass = fcImageSize === 'large' ? 'fc-back-image fc-image-large' : 'fc-back-image'
 
   const studyModes = [
-    { key: 'speaking',  label: 'Speaking',   icon: MicrophoneIcon },
-    { key: 'dialogue',  label: 'Hội thoại',  icon: ChatBubbleLeftRightIcon },
+    { key: 'speaking',  label: 'Speaking',   icon: ChatBubbleBottomCenterIcon },
+    { key: 'dialogue',  label: 'Hội thoại',  icon: ChatBubbleOvalLeftIcon },
     { key: 'grammar',   label: 'Ngữ pháp',   icon: BookOpenIcon },
-    { key: 'reading',   label: 'Đọc hiểu',   icon: AcademicCapIcon },
-    { key: 'learn',     label: 'Học',         icon: RectangleStackIcon },
-    { key: 'test',      label: 'Kiểm tra',   icon: DocumentCheckIcon },
-    { key: 'dictation', label: 'Nghe Chép',  icon: MusicalNoteIcon },
+    { key: 'reading',   label: 'Đọc hiểu',   icon: DocumentTextIcon },
+    { key: 'learn',     label: 'Học',         icon: AcademicCapIcon },
+    { key: 'quiz',      label: 'Học Quiz',   icon: QuestionMarkCircleIcon },
+    { key: 'test',      label: 'Kiểm tra',   icon: DocumentTextIcon },
+    { key: 'dictation', label: 'Nghe Chép',  icon: Squares2X2Icon },
   ]
 
   return (
@@ -144,15 +158,46 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
       {/* Study Mode Buttons */}
       <div className="fc-mode-bar">
         {studyModes.map(mode => (
-          <button key={mode.key} className="fc-mode-btn" title={mode.label}>
+          <button 
+            key={mode.key} 
+            className={`fc-mode-btn ${activeMode === mode.key ? 'active' : ''}`} 
+            title={mode.label}
+            onClick={() => {
+              if (mode.key === 'learn' || mode.key === 'quiz') {
+                setActiveMode(mode.key as StudyMode);
+                if (onModeChange) onModeChange(mode.key as StudyMode);
+              } else {
+                toast.info('Tính năng sắp ra mắt');
+              }
+            }}
+          >
             <mode.icon className="fc-mode-icon" />
             <span>{mode.label}</span>
           </button>
         ))}
       </div>
 
+      {activeMode === 'quiz' && (
+        <div className="fc-quiz-area">
+          <QuizPage
+            vocabularies={vocabularies}
+            decks={decks}
+            masteryWords={masteryWords}
+            onExit={() => {
+              setActiveMode('learn');
+              if (onModeChange) onModeChange('learn');
+            }}
+            onEditWord={openEditModal}
+            speak={speak}
+            submitProgress={submitProgress}
+          />
+        </div>
+      )}
+
       {/* Card Area */}
-      <div className="fc-card-area">
+      {activeMode === 'learn' && (
+        <>
+          <div className="fc-card-area">
         <div
           className={`fc-card-container ${fcFlipped ? 'flipped' : ''}`}
           onClick={() => setFcFlipped(f => !f)}
@@ -364,6 +409,8 @@ export default function FlashcardsPage({ vocabularies, submitProgress }: Flashca
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

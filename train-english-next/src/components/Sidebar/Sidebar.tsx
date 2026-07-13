@@ -24,14 +24,7 @@ const menuItems: MenuItem[] = [
   { icon: <FireIcon className="sb-icon" />, label: 'Streak', key: 'streak' },
   { icon: <TrophyIcon className="sb-icon" />, label: 'Độ thông thạo', key: 'mastery' },
   { icon: <BoltIcon className="sb-icon" />, label: 'Cày thông thạo', key: 'practice' },
-  {
-    icon: <LightBulbIcon className="sb-icon" />,
-    label: 'Luyện tập đơn',
-    key: 'single_practice',
-    children: [
-      { icon: <QuestionMarkCircleIcon className="sb-icon" />, label: 'Quiz', key: 'quiz' },
-    ]
-  },
+
   { icon: <UserGroupIcon className="sb-icon" />, label: 'Quản lý người dùng', key: 'users' },
 ]
 

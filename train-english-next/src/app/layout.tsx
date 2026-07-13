@@ -4,6 +4,7 @@ import "./globals.css";
 import "./index.css";
 import "./App.css";
 import { AuthProvider } from "@/AuthContext";
+import { Toaster } from "sonner";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin", "vietnamese"],
@@ -43,6 +44,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <AuthProvider>{children}</AuthProvider>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );
