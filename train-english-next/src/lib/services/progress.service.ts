@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import User from "../db/models/User";
-import { UserWordProgress, Vocabulary } from "../db/models";
+import { UserWordProgress, Vocabulary, Deck } from "../db/models";
 import { DailyActivity } from "../db/models/DailyActivity";
 import dbConnect from "../db/connection";
 import {
@@ -708,7 +708,7 @@ export const seedDemo = async (userId: string) => {
 // ================================================================
 // GET /api/progress/words — Danh sách từ vựng kèm điểm + filter
 // ================================================================
-export const getWords = async (payload: { tier?: string; search?: string; sort?: string; page?: string; limit?: string; skill?: string }, userId: string) => {
+export const getWords = async (payload: { tier?: string; search?: string; sort?: string; page?: string; limit?: string; skill?: string; deckId?: string }, userId: string) => {
   await dbConnect();
   try {
     const {
@@ -718,18 +718,34 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
       page = "1",
       limit = "20",
       skill = "all",
+      deckId,
     } = payload as Record<string, string>;
 
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+
+    // Verify deck ownership if deckId is provided
+    if (deckId) {
+      if (!mongoose.Types.ObjectId.isValid(deckId)) {
+        throw new Error(JSON.stringify({ success: false, message: "Invalid deckId" }));
+      }
+      const deck = await Deck.findOne({ _id: deckId, userId });
+      if (!deck) {
+        throw new Error(JSON.stringify({ success: false, message: "Deck not found or access denied" }));
+      }
+    }
 
     // Get all vocabularies
     const searchFilter: any = {};
     if (search) {
       searchFilter.word = { $regex: search, $options: "i" };
     }
+    if (deckId) {
+      searchFilter.deckIds = new mongoose.Types.ObjectId(deckId);
+    }
+    
     const allVocabs = await Vocabulary.find(searchFilter)
-      .select("word pronunciation level type partOfSpeech topic")
+      .select("word pronunciation meanings imageUrl level type partOfSpeech topic")
       .lean();
 
     // Get all progress records
@@ -769,8 +785,11 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
         wordId: vocab._id.toString(),
         word: vocab.word,
         pronunciation: vocab.pronunciation || "",
+        meanings: vocab.meanings || [],
+        imageUrl: vocab.imageUrl || "",
         level: vocab.level || "A1",
         type: vocab.type || "word",
+        partOfSpeech: vocab.partOfSpeech || "",
         skills: { recall, listening, writing, pronunciation },
         overall,
         tier: getTier(

@@ -23,6 +23,16 @@ export class DeckService {
     }));
   }
 
+  static async getById(userId: string, deckId: string) {
+    await dbConnect();
+    const deck = await Deck.findOne({ _id: deckId, userId }).lean();
+    if (!deck) throw new Error("Deck not found");
+    
+    // Get word count
+    const count = await Vocabulary.countDocuments({ deckIds: deckId });
+    return { ...deck, wordCount: count };
+  }
+
   static async create(userId: string, data: any) {
     await dbConnect();
     const { name, description, color } = data;

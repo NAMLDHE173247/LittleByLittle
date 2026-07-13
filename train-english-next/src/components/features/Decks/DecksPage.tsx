@@ -99,13 +99,13 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
   }
 
   return (
-    <>
+    <div className="decks-container">
       <div className="page-header">
         <div>
           <h1 className="page-title">Bộ thẻ</h1>
           <p className="page-subtitle">Sắp xếp từ vựng theo bộ thẻ học tập</p>
         </div>
-        <button className="btn-primary" onClick={() => openDeckModal()}>
+        <button className="btn-primary btn-create-deck" onClick={() => openDeckModal()}>
           <PlusIcon className="icon icon-inline" /> Tạo bộ thẻ
         </button>
       </div>
@@ -113,29 +113,54 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
       <div className="deck-grid">
         {decks.length === 0 ? (
           <div className="deck-empty">
-            <RectangleStackIcon className="icon" style={{ width: 48, height: 48, opacity: 0.3 }} />
-            <p>Chưa có bộ thẻ nào. Tạo bộ thẻ đầu tiên để sắp xếp từ vựng!</p>
+            <RectangleStackIcon className="icon" style={{ width: 64, height: 64, opacity: 0.2 }} />
+            <p>Chưa có bộ thẻ nào. Hãy tạo bộ thẻ đầu tiên để sắp xếp từ vựng của bạn một cách khoa học nhé!</p>
+            <button className="btn-primary btn-create-deck" style={{ marginTop: '8px' }} onClick={() => openDeckModal()}>
+              <PlusIcon className="icon icon-inline" /> Tạo bộ thẻ ngay
+            </button>
           </div>
         ) : (
           decks.map(deck => (
-            <div key={deck._id} className="deck-card" style={{ borderTopColor: deck.color, cursor: onDeckClick ? 'pointer' : 'default' }} onClick={() => onDeckClick && onDeckClick(deck._id)}>
+            <div 
+              key={deck._id} 
+              className="deck-card" 
+              style={{ '--deck-color': deck.color, cursor: onDeckClick ? 'pointer' : 'default' } as React.CSSProperties} 
+              onClick={() => onDeckClick && onDeckClick(deck._id)}
+            >
               <div className="deck-card-header">
                 <div className="deck-card-color" style={{ backgroundColor: deck.color }} />
-                <h3 className="deck-card-name">{deck.name}</h3>
+                <h3 className="deck-card-name" title={deck.name}>{deck.name}</h3>
               </div>
+              
               {deck.description && (
-                <p className="deck-card-desc">{deck.description}</p>
+                <p className="deck-card-desc" title={deck.description}>{deck.description}</p>
               )}
-              <div className="deck-card-stats">
-                <span className="deck-card-count">{deck.wordCount || 0} từ</span>
-              </div>
-              <div className="deck-card-actions">
-                <button className="btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); openDeckModal(deck); }}>
-                  <PencilSquareIcon className="icon icon-inline" /> Sửa
-                </button>
-                <button className="btn-danger-sm" onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck); }}>
-                  <TrashIcon className="icon icon-inline" /> Xóa
-                </button>
+              
+              <div className="deck-card-footer">
+                <div className="deck-card-stats">
+                  <span className="deck-card-count">{deck.wordCount || 0} từ</span>
+                  {deck.updatedAt && (
+                    <span className="deck-card-date">
+                      Cập nhật: {new Date(deck.updatedAt).toLocaleDateString('vi-VN')}
+                    </span>
+                  )}
+                </div>
+                <div className="deck-card-actions">
+                  <button 
+                    className="deck-action-btn edit" 
+                    onClick={(e) => { e.stopPropagation(); openDeckModal(deck); }} 
+                    title="Sửa bộ thẻ"
+                  >
+                    <PencilSquareIcon className="icon" />
+                  </button>
+                  <button 
+                    className="deck-action-btn delete" 
+                    onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck); }} 
+                    title="Xóa bộ thẻ"
+                  >
+                    <TrashIcon className="icon" />
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -227,6 +252,6 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }

@@ -9,8 +9,7 @@ export default function DecksRoute() {
   const router = useRouter();
 
   const handleDeckClick = (deckId: string) => {
-    setFilterDeck(deckId);
-    router.push('/vocabulary');
+    router.push(`/decks/${deckId}`);
   };
 
   return (

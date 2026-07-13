@@ -2145,98 +2145,8 @@ body {
 
 /* ===================================================
    DECK PAGE — Card Grid
+   (Moved to DecksPage.css)
    =================================================== */
-.deck-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-.deck-empty {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--text-muted);
-  text-align: center;
-  gap: 12px;
-}
-
-.deck-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-top: 3px solid;
-  border-radius: var(--radius);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  transition: all 0.25s ease;
-  cursor: default;
-}
-
-.deck-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--border-hover);
-}
-
-.deck-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.deck-card-color {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.deck-card-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-  flex: 1;
-}
-
-.deck-card-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.deck-card-stats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.deck-card-count {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-light);
-  padding: 4px 10px;
-  border-radius: 20px;
-}
-
-.deck-card-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
 
 /* Small button variants */
 .btn-sm {
@@ -4746,3 +4656,26 @@ body {
    =================================================================== */
 
 /* ---- Start Screen ---- */
+
+/* ===================================================================
+   DECK DETAIL PAGE — Flashcard wrapper override
+   When FlashcardsPage is embedded inside /decks/[id] page,
+   we strip the large top padding and expand card width to fill the container.
+   =================================================================== */
+.deck-fc-wrapper .fc-page {
+  padding: 0 0 8px 0;
+  gap: 12px;
+}
+
+.deck-fc-wrapper .fc-card-area {
+  max-width: 100%;
+}
+
+.deck-fc-wrapper .fc-card {
+  min-height: 480px;
+  height: 480px;
+}
+
+.deck-fc-wrapper .fc-main-text {
+  font-size: 40px;
+}

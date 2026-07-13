@@ -29,7 +29,6 @@ const menuItems: MenuItem[] = [
     label: 'Luyện tập đơn',
     key: 'single_practice',
     children: [
-      { icon: <RectangleStackIcon className="sb-icon" />, label: 'Thẻ ghi nhớ', key: 'flashcards' },
       { icon: <QuestionMarkCircleIcon className="sb-icon" />, label: 'Quiz', key: 'quiz' },
     ]
   },

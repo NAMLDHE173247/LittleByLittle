@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { DeckService } from "@/lib/services/deck.service";
 import { verifyAuth } from "@/lib/utils/auth";
 
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const authUser = verifyAuth(req);
+    if (!authUser) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+
+    const { id } = await params;
+    const deck = await DeckService.getById(authUser.id, id);
+    return NextResponse.json({ success: true, data: deck });
+  } catch (error: any) {
+    if (error.message === "Deck not found") {
+      return NextResponse.json({ success: false, message: error.message }, { status: 404 });
+    }
+    return NextResponse.json({ success: false, message: error.message }, { status: 400 });
+  }
+}
+
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authUser = verifyAuth(req);
