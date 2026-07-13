@@ -11,6 +11,7 @@ import VocabularyModals from '@/components/features/Vocabulary/VocabularyModals'
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, logout, authHeaders } = useAuth();
   const globalData = useGlobalData();
+  const [selectedImportDeckIds, setSelectedImportDeckIds] = React.useState<string[]>([]);
   const {
     darkMode, setDarkMode, sidebarCollapsed, setSidebarCollapsed,
     expandedMenus, toggleMenu,
@@ -46,14 +47,16 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           ...authHeaders()
         },
-        body: JSON.stringify(parsed)
+        body: JSON.stringify({ words: parsed, deckIds: selectedImportDeckIds })
       });
       const result = await res.json();
 
       if (result.success) {
         globalData.setImportResult(result.data);
+        setSelectedImportDeckIds([]);
         globalData.fetchVocabularies();
         globalData.fetchMetadata();
+        globalData.fetchDecks();
       } else {
         globalData.setImportError(result.message || 'Import thất bại');
       }
@@ -193,7 +196,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           showImportModal, importJsonText, importError, isImporting, importResult, importCopied,
           showModal, editingId, formError, formData, saving,
           deleteTarget, deleting, quickDeckVocab, quickDeckIds, savingQuickDeck,
-          detailVocab, copied, decks
+          detailVocab, copied, decks, selectedImportDeckIds
         }}
         modalsActions={{
           setShowImportModal, setImportJsonText, setImportError, setImportResult, setImportCopied, handleImport,
@@ -201,7 +204,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           setDeleteTarget, handleDelete, handleDeleteSelected, handleClearAll,
           setQuickDeckVocab, setQuickDeckIds, handleSaveQuickDeck,
           setDetailVocab, speak, setCopied, getLevelColor, openEditModal,
-          authHeaders, fetchVocabularies: globalData.fetchVocabularies
+          authHeaders, fetchVocabularies: globalData.fetchVocabularies, setSelectedImportDeckIds
         }}
       />
     </div>

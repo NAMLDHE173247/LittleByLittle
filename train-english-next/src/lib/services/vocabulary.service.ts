@@ -1,5 +1,6 @@
-import { Vocabulary } from "../db/models";
+import { Vocabulary, Deck } from "../db/models";
 import dbConnect from "../db/connection";
+import mongoose from "mongoose";
 
 export class VocabularyService {
   static async getMetadata() {
@@ -98,25 +99,47 @@ export class VocabularyService {
     return result.deletedCount;
   }
 
-  static async bulkImport(words: any[]) {
+  static async bulkImport(words: any[], deckIds: string[] = [], authUserId: string) {
     await dbConnect();
     if (!words || words.length === 0) throw new Error("Mảng từ vựng rỗng");
     if (words.length > 200) throw new Error("Tối đa 200 từ vựng mỗi lần import");
 
+    // 1. Validate Deck IDs
+    if (deckIds.length > 50) throw new Error("Tối đa 50 bộ thẻ mỗi lần import");
+    
+    // Validate ObjectId and deduplicate
+    const uniqueDeckIds = [...new Set(deckIds)];
+    const validDeckIds: string[] = [];
+    for (const id of uniqueDeckIds) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        throw new Error(`ID bộ thẻ không hợp lệ: ${id}`);
+      }
+      validDeckIds.push(id);
+    }
+
+    // Verify ownership
+    if (validDeckIds.length > 0) {
+      const ownedDecksCount = await Deck.countDocuments({
+        _id: { $in: validDeckIds },
+        userId: authUserId
+      });
+      if (ownedDecksCount !== validDeckIds.length) {
+        throw new Error("Một hoặc nhiều bộ thẻ không tồn tại hoặc không thuộc quyền sở hữu của bạn");
+      }
+    }
+
+    // 2. Prepare and Deduplicate request words
     const errors: string[] = [];
     const validWords: any[] = [];
-    const skippedDuplicates: string[] = [];
-
-    const existingWordTexts = words.map((w: any) => w.word?.trim?.()?.toLowerCase()).filter(Boolean);
-    const existingDocs = await Vocabulary.find({
-      word: { $regex: new RegExp(`^(${existingWordTexts.map((w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`, 'i') }
-    }).select('word');
-    const existingSet = new Set(existingDocs.map((d: any) => d.word.toLowerCase()));
+    let duplicateInRequestCount = 0;
+    let invalidCount = 0;
+    const seenInRequest = new Set<string>();
 
     for (let i = 0; i < words.length; i++) {
       const item = words[i];
       if (!item.word || !item.word.trim()) {
         errors.push(`Từ #${i + 1}: Thiếu trường "word"`);
+        invalidCount++;
         continue;
       }
       if (!item.meanings || !Array.isArray(item.meanings) || item.meanings.length === 0) {
@@ -124,13 +147,16 @@ export class VocabularyService {
           item.meanings = [item.meanings.trim()];
         } else {
           errors.push(`Từ #${i + 1} ("${item.word}"): Thiếu trường "meanings"`);
+          invalidCount++;
           continue;
         }
       }
 
       const wordLower = item.word.trim().toLowerCase();
-      if (existingSet.has(wordLower)) {
-        skippedDuplicates.push(item.word);
+      
+      // Deduplicate inside request JSON
+      if (seenInRequest.has(wordLower)) {
+        duplicateInRequestCount++;
         continue;
       }
 
@@ -153,30 +179,66 @@ export class VocabularyService {
           return url.toLowerCase() === 'invalid' ? '' : url;
         })(),
         audioUrl: item.audioUrl?.trim?.() || '',
-        deckIds: Array.isArray(item.deckIds) ? item.deckIds : [],
+        deckIds: validDeckIds, // Assign verified deckIds
       };
 
-      if (validWords.some(v => v.word.toLowerCase() === wordLower)) {
-        skippedDuplicates.push(item.word);
-        continue;
-      }
-
       validWords.push(sanitized);
-      existingSet.add(wordLower);
+      seenInRequest.add(wordLower);
     }
 
-    let insertedCount = 0;
-    if (validWords.length > 0) {
-      const result = await Vocabulary.insertMany(validWords, { ordered: false });
-      insertedCount = result.length;
+    // 3. Find existing words in DB
+    const existingWordTexts = validWords.map((w: any) => w.word.toLowerCase());
+    let existingMap = new Map<string, string>();
+    
+    if (existingWordTexts.length > 0) {
+      // Create a regex to match all words case-insensitively
+      const regexPattern = `^(${existingWordTexts.map((w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`;
+      const existingDocs = await Vocabulary.find({
+        word: { $regex: new RegExp(regexPattern, 'i') }
+      }).select('_id word');
+
+      for (const doc of existingDocs) {
+        existingMap.set(doc.word.toLowerCase(), doc._id.toString());
+      }
+    }
+
+    // 4. Split into new and existing
+    const newWordsToInsert: any[] = [];
+    const existingDocsIds: string[] = [];
+
+    for (const w of validWords) {
+      const wLower = w.word.toLowerCase();
+      if (existingMap.has(wLower)) {
+        existingDocsIds.push(existingMap.get(wLower)!);
+      } else {
+        newWordsToInsert.push(w);
+      }
+    }
+
+    // 5. Execute DB operations
+    let createdCount = 0;
+    if (newWordsToInsert.length > 0) {
+      const result = await Vocabulary.insertMany(newWordsToInsert, { ordered: false });
+      createdCount = result.length;
+    }
+
+    let updatedVocabularyCount = 0;
+    if (existingDocsIds.length > 0 && validDeckIds.length > 0) {
+      const result = await Vocabulary.updateMany(
+        { _id: { $in: existingDocsIds } },
+        { $addToSet: { deckIds: { $each: validDeckIds } } }
+      );
+      updatedVocabularyCount = result.modifiedCount;
     }
 
     return {
-      inserted: insertedCount,
-      skipped: skippedDuplicates.length,
-      skippedWords: skippedDuplicates,
+      createdCount,
+      existingCount: existingDocsIds.length,
+      duplicateInRequestCount,
+      invalidCount,
+      updatedVocabularyCount,
+      selectedDeckCount: validDeckIds.length,
       errors: errors,
-      total: words.length,
     };
   }
 }

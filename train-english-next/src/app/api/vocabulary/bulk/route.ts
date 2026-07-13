@@ -9,12 +9,19 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     let words = [];
-    if (Array.isArray(body)) words = body;
-    else if (body.words && Array.isArray(body.words)) words = body.words;
-    else return NextResponse.json({ success: false, message: "Dữ liệu không hợp lệ" }, { status: 400 });
+    let deckIds: string[] = [];
+    if (Array.isArray(body)) {
+      words = body;
+    } else {
+      if (body.words && Array.isArray(body.words)) words = body.words;
+      if (body.deckIds && Array.isArray(body.deckIds)) deckIds = body.deckIds;
+    }
+    if (!words || words.length === 0) {
+      return NextResponse.json({ success: false, message: "Dữ liệu từ vựng không hợp lệ hoặc rỗng" }, { status: 400 });
+    }
 
-    const result = await VocabularyService.bulkImport(words);
-    return NextResponse.json({ success: true, message: `Import thành công ${result.inserted} từ vựng`, data: result }, { status: 201 });
+    const result = await VocabularyService.bulkImport(words, deckIds, authUser.id);
+    return NextResponse.json({ success: true, message: `Import thành công`, data: result }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: error.message }, { status: 400 });
   }

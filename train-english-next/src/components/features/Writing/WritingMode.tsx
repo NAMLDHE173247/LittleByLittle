@@ -169,7 +169,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
   // ── Setup state ──
   const [started, setStarted] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [wordCount, setWordCount] = useState(8)
+  const [wordCount, setWordCount] = useState(4)
   const [customWordCount, setCustomWordCount] = useState('')
   const [sourceMode, setSourceMode] = useState('lowest_score')
   const [filterDeck, setFilterDeck] = useState('')
