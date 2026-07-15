@@ -24,13 +24,14 @@ import {
 import { toast } from 'sonner'
 import { useGlobalData } from '@/components/providers/GlobalDataProvider'
 import QuizPage from '@/components/features/Quiz/QuizPage'
+import TTSSettingsModal from '@/components/shared/TTSSettingsModal'
 import './FlashcardsPage.css'
 
 export type StudyMode = 'learn' | 'quiz' | 'speaking' | 'dialogue' | 'grammar' | 'reading' | 'test' | 'dictation';
 
 interface FlashcardsPageProps {
   vocabularies: any[]
-  submitProgress?: (wordId: string, skill: string, isCorrect: boolean) => void
+  submitProgress?: (wordId: string, skill: string, isCorrect: boolean) => Promise<boolean | void> | void
   onModeChange?: (mode: StudyMode) => void
   onQuizActiveChange?: (isActive: boolean) => void
 }
@@ -38,7 +39,7 @@ interface FlashcardsPageProps {
 export default function FlashcardsPage({ vocabularies, submitProgress, onModeChange, onQuizActiveChange }: FlashcardsPageProps) {
   const [activeMode, setActiveMode] = useState<StudyMode>('learn')
   const [isQuizStarted, setIsQuizStarted] = useState(false)
-  const { decks, masteryWords, openEditModal, speak } = useGlobalData()
+  const { decks, masteryWords, openEditModal, speak, ttsAccent, ttsSettingsReady } = useGlobalData()
   const [fcIndex, setFcIndex] = useState(0)
   const [fcFlipped, setFcFlipped] = useState(false)
   const [fcShuffled, setFcShuffled] = useState(false)
@@ -50,6 +51,37 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
   const [fcImageSize, setFcImageSize] = useState<'small' | 'large'>('large')
   const [fcPronunciation, setFcPronunciation] = useState<'front' | 'back'>('front')
   const [fcShowStudyGuide, setFcShowStudyGuide] = useState(false)
+  const [isTTSSettingsOpen, setIsTTSSettingsOpen] = useState(false)
+  const submittingWordsRef = React.useRef<Set<string>>(new Set())
+  const submittedWordsRef = React.useRef<Set<string>>(new Set())
+
+  const handleProgressSubmission = async (card: any) => {
+    if (!submitProgress) return;
+    const vId = card?._id || card?.wordId;
+    if (!vId) {
+      console.warn("[Flashcards] Missing ID for word progress. Card data:", card);
+      return;
+    }
+    const safeId = String(vId);
+    
+    // Nếu đang gửi hoặc đã gửi thành công thì bỏ qua
+    if (submittingWordsRef.current.has(safeId) || submittedWordsRef.current.has(safeId)) {
+      return;
+    }
+
+    submittingWordsRef.current.add(safeId);
+    try {
+      const result = await submitProgress(safeId, 'recall', true);
+      // Nếu submitProgress trả về false (lỗi nghiệp vụ) thì không đánh dấu thành công
+      if (result !== false) {
+        submittedWordsRef.current.add(safeId);
+      }
+    } catch (e) {
+      console.error("[Flashcards] Failed to submit progress for", safeId, e);
+    } finally {
+      submittingWordsRef.current.delete(safeId);
+    }
+  }
 
   const fcCards = useMemo(() => {
     if (fcOrder.length > 0 && fcShuffled) {
@@ -59,36 +91,34 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
   }, [vocabularies, fcOrder, fcShuffled])
 
   const speakWord = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'en-US'
-      utterance.rate = 0.85
-      window.speechSynthesis.speak(utterance)
-    }
+    speak(text, { mode: 'autoplay', source: 'flashcard-auto', ownerId: 'flashcards' })
   }
 
   const fcNext = () => {
     if (fcIndex < fcCards.length - 1) {
-      if (submitProgress && fcCards[fcIndex]) {
-        submitProgress(fcCards[fcIndex]._id, 'recall', true)
+      if (fcCards[fcIndex]) {
+        handleProgressSubmission(fcCards[fcIndex]);
       }
       const newIndex = fcIndex + 1
       setFcIndex(newIndex)
       setFcFlipped(false)
-      if (fcAutoSpeak && fcCards[newIndex]) speakWord(fcCards[newIndex].word)
+      if (fcAutoSpeak && fcCards[newIndex] && ttsSettingsReady) {
+        speakWord(fcCards[newIndex].word)
+      }
     }
   }
 
   const fcPrev = () => {
     if (fcIndex > 0) {
-      if (submitProgress && fcCards[fcIndex]) {
-        submitProgress(fcCards[fcIndex]._id, 'recall', true)
+      if (fcCards[fcIndex]) {
+        handleProgressSubmission(fcCards[fcIndex]);
       }
       const newIndex = fcIndex - 1
       setFcIndex(newIndex)
       setFcFlipped(false)
-      if (fcAutoSpeak && fcCards[newIndex]) speakWord(fcCards[newIndex].word)
+      if (fcAutoSpeak && fcCards[newIndex] && ttsSettingsReady) {
+        speakWord(fcCards[newIndex].word)
+      }
     }
   }
 
@@ -266,6 +296,21 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
                     Lớn
                   </label>
                 </div>
+                
+                <div className="fc-settings-divider" />
+                <div className="fc-settings-group">
+                  <span className="fc-settings-label">Phát âm</span>
+                  <div className="fc-settings-option" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <span>Giọng: {ttsAccent === 'en-GB' ? 'Anh-Anh' : 'Anh-Mỹ'}</span>
+                    <button 
+                      className="fc-edit-voice-btn"
+                      style={{ padding: '4px 8px', fontSize: 12, backgroundColor: '#f0f0f0', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); setIsTTSSettingsOpen(true); }}
+                    >
+                      Đổi giọng
+                    </button>
+                  </div>
+                </div>
                 <div className="fc-settings-divider" />
                 <div className="fc-settings-group">
                   <span className="fc-settings-label">Cách phát âm</span>
@@ -422,6 +467,9 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
         </div>
       )}
         </>
+      )}
+      {isTTSSettingsOpen && (
+        <TTSSettingsModal onClose={() => setIsTTSSettingsOpen(false)} />
       )}
     </div>
   )

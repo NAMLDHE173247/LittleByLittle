@@ -75,7 +75,7 @@ export default function DeckMasteryRoute() {
     fetchAllWords();
   }, [deckId, authHeaders]);
 
-  const submitProgress = async (wordId: string, skill: string, isCorrect: boolean) => {
+  const submitProgress = async (wordId: string, skill: string, isCorrect: boolean): Promise<boolean> => {
     try {
       const todayStr = new Date().toLocaleDateString('en-CA');
       const updatePromise = fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/progress/review`, {
@@ -87,27 +87,29 @@ export default function DeckMasteryRoute() {
         body: JSON.stringify({ wordId, skill, correct: isCorrect, clientDateString: todayStr })
       });
 
-      // Handle Gamification async
-      updatePromise.then(res => res.json()).then(data => {
-        if (data.success && data.data?.todayTotalReviews) {
-          const reviews = data.data.todayTotalReviews;
-          if (reviews === 41) {
-            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-            toast.success("Tuyệt vời! Bạn đang cực kỳ Bứt phá ngày hôm nay! 🔥");
-          } else if (reviews === 81) {
-            confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
-            toast.success("Xuất sắc! Trạng thái Siêu nhân đã được kích hoạt! 🦸‍♂️");
-          }
-        }
-      }).catch(console.error);
-
       // Optimistic update without waiting for fetch
       mutate(async () => {
         await updatePromise;
         return undefined; // triggers revalidation
       }, { revalidate: true });
+
+      const res = await updatePromise;
+      const data = await res.json();
+
+      if (data.success && data.data?.todayTotalReviews) {
+        const reviews = data.data.todayTotalReviews;
+        if (reviews === 41) {
+          confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+          toast.success("Tuyệt vời! Bạn đang cực kỳ Bứt phá ngày hôm nay! 🔥");
+        } else if (reviews === 81) {
+          confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
+          toast.success("Xuất sắc! Trạng thái Siêu nhân đã được kích hoạt! 🦸‍♂️");
+        }
+      }
+      return !!data.success;
     } catch (error) {
       console.error('Failed to submit flashcard progress:', error);
+      return false;
     }
   };
 

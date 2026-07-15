@@ -236,6 +236,14 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
   const speakTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const watchdogTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const requestIdRef = useRef<number>(0);
+  const lastSpeakEndRef = useRef<number>(Date.now());
+  const lastCancelTimeRef = useRef<number>(0);
+
+  const SPEECH_DEBUG = process.env.NODE_ENV === 'development';
+
+  const [ttsAccent, setTtsAccent] = useState<'en-US' | 'en-GB'>('en-US');
+  const [ttsSettingsReady, setTtsSettingsReady] = useState(false);
+  const [activeVoiceName, setActiveVoiceName] = useState<string>('');
 
   const loadVoices = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -243,9 +251,50 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
-  const cancelSpeech = useCallback(() => {
+  // Hydrate TTS settings & set up voiceschanged listener
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('trainEnglish.ttsSettings.v1');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.accent === 'en-US' || parsed.accent === 'en-GB') {
+            setTtsAccent(parsed.accent);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse TTS settings from localStorage, falling back to en-US');
+      } finally {
+        setTtsSettingsReady(true);
+      }
+
+      if ('speechSynthesis' in window) {
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+    }
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, [loadVoices]);
+
+  const updateTtsAccent = useCallback((accent: 'en-US' | 'en-GB') => {
+    if (accent !== 'en-US' && accent !== 'en-GB') return;
+    setTtsAccent(accent);
+    try {
+      localStorage.setItem('trainEnglish.ttsSettings.v1', JSON.stringify({ accent }));
+    } catch (e) {
+      console.error('Failed to save TTS settings', e);
+    }
+  }, []);
+
+  const cancelSpeech = useCallback((reason = 'manual-cancel') => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       requestIdRef.current += 1;
+      lastCancelTimeRef.current = Date.now();
+      if (SPEECH_DEBUG) console.log(`[TTS] Cancel Req ${requestIdRef.current - 1} | reason=${reason} | replacedBy=Req ${requestIdRef.current}`);
       if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
       if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
       window.speechSynthesis.cancel();
@@ -255,47 +304,88 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
 
   const stopSpeaking = cancelSpeech;
 
-  const speak = useCallback((text: string, isRetry = false) => {
+  const speak = useCallback((text: string, options?: { isRetry?: boolean, mode?: string, source?: string, ownerId?: string, requestKey?: string, cancelReason?: string }) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     
     const cleanText = text.trim();
     if (!cleanText) return;
 
+    const isRetry = options?.isRetry || false;
+    const mode = options?.mode || 'unknown';
+    const source = options?.source || 'unknown';
+    const ownerId = options?.ownerId || 'unknown';
+
+    const requestTime = Date.now();
+    const idleForMs = requestTime - lastSpeakEndRef.current;
+    const cancelAgoMs = lastCancelTimeRef.current > 0 ? requestTime - lastCancelTimeRef.current : -1;
+
     if (!isRetry) {
       requestIdRef.current += 1;
+      if (SPEECH_DEBUG) {
+        console.log(`[TTS] Req ${requestIdRef.current} | source=${source} | mode=${mode} | owner=${ownerId} | idleForMs=${idleForMs} | cancelAgoMs=${cancelAgoMs} | text="${cleanText}"`);
+      }
       if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
       if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
       window.speechSynthesis.cancel();
+    } else {
+      if (SPEECH_DEBUG) console.log(`[TTS] Req ${requestIdRef.current} | Retrying speech for text: "${cleanText}"`);
     }
 
     if (window.speechSynthesis.paused) {
+      if (SPEECH_DEBUG) console.log(`[TTS] Req ${requestIdRef.current} | Resuming paused synthesis`);
       window.speechSynthesis.resume();
     }
 
     const currentReqId = requestIdRef.current;
 
     speakTimeoutRef.current = setTimeout(() => {
-      if (currentReqId !== requestIdRef.current) return;
+      if (currentReqId !== requestIdRef.current) {
+        if (SPEECH_DEBUG) console.log(`[TTS] Req ${currentReqId} | Ignored (replaced by a newer request)`);
+        return;
+      }
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = 'en-US';
+      utterance.lang = ttsAccent;
       utterance.rate = 0.9;
       utterance.pitch = 1;
 
       const voices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
-      const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
-        || voices.find(v => v.lang.startsWith('en-US'))
-        || voices.find(v => v.lang.startsWith('en'));
-      if (enVoice) utterance.voice = enVoice;
+      
+      // Lọc voice đúng accent
+      let matchedVoice = voices.find(v => v.lang === ttsAccent && (v.name.includes('Google') || v.localService));
+      if (!matchedVoice) {
+        matchedVoice = voices.find(v => v.lang === ttsAccent);
+      }
+      // Fallback 1: Bất kỳ voice tiếng Anh nào nếu không tìm thấy accent
+      if (!matchedVoice) {
+        matchedVoice = voices.find(v => v.lang.startsWith('en'));
+      }
+      
+      if (matchedVoice) {
+        utterance.voice = matchedVoice;
+        setActiveVoiceName(matchedVoice.name);
+      } else {
+        setActiveVoiceName('');
+      }
+
+      if (SPEECH_DEBUG) {
+        const v = utterance.voice;
+        console.log(`[TTS] Req ${currentReqId} | Assigned voice: ${v?.name || 'none'} (${v?.lang || utterance.lang}) | localService=${v?.localService} | default=${v?.default} | voiceURI=${v?.voiceURI}`);
+        console.log(`[TTS] Req ${currentReqId} | Calling window.speechSynthesis.speak()`);
+      }
 
       let hasStarted = false;
 
       utterance.onstart = () => {
+        const startLatencyMs = Date.now() - requestTime;
+        if (SPEECH_DEBUG) console.log(`[TTS] Req ${currentReqId} | onstart event | startLatencyMs=${startLatencyMs}`);
         hasStarted = true;
         if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
       };
 
       utterance.onend = () => {
+        if (SPEECH_DEBUG) console.log(`[TTS] Req ${currentReqId} | onend event`);
+        lastSpeakEndRef.current = Date.now();
         if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
         if (currentUtteranceRef.current === utterance) {
           currentUtteranceRef.current = null;
@@ -303,14 +393,16 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       };
 
       utterance.onerror = (e) => {
+        if (SPEECH_DEBUG) console.log(`[TTS] Req ${currentReqId} | onerror event: ${e.error}`);
         if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
         if (currentReqId !== requestIdRef.current) return; 
         if (e.error === 'interrupted' || e.error === 'canceled') return; 
         
         console.warn('SpeechSynthesis error:', e.error);
         if (!hasStarted && !isRetry) {
-          cancelSpeech();
-          speak(cleanText, true); 
+          if (SPEECH_DEBUG) console.log(`[TTS] Req ${currentReqId} | Triggering retry from onerror`);
+          cancelSpeech('retry-from-error');
+          speak(cleanText, { ...options, isRetry: true }); 
         }
       };
 
@@ -321,15 +413,15 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       watchdogTimeoutRef.current = setTimeout(() => {
         if (currentReqId !== requestIdRef.current) return;
         if (!hasStarted && !isRetry) {
-          console.warn('SpeechSynthesis watchdog triggered, retrying...');
-          cancelSpeech();
-          speak(cleanText, true);
+          if (SPEECH_DEBUG) console.warn(`[TTS] Req ${currentReqId} | Watchdog triggered (timeout), retrying...`);
+          cancelSpeech('watchdog-timeout');
+          speak(cleanText, { ...options, isRetry: true });
         }
       }, 1500);
 
     }, 50);
 
-  }, [cancelSpeech]);
+  }, [cancelSpeech, ttsAccent]);
 
   const getLevelColor = (level: string) => {
     const colors: Record<string, string> = {
@@ -451,7 +543,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     
     // Actions
     fetchMetadata, fetchDecks, fetchProgress, fetchMasteryWords, fetchVocabularies,
-    openAddModal, openEditModal, closeModal, speak, stopSpeaking, getLevelColor, handleSave
+    openAddModal, openEditModal, closeModal, cancelSpeech, stopSpeaking, speak, updateTtsAccent, ttsAccent, ttsSettingsReady, activeVoiceName, getLevelColor, handleSave
   };
 
   return (

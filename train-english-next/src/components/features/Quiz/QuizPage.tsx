@@ -22,6 +22,8 @@ import {
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { checkAnswer } from '@/lib/utils/answerUtils'
+import { useGlobalData } from '@/components/providers/GlobalDataProvider'
+import TTSSettingsModal from '@/components/shared/TTSSettingsModal'
 
 // ===== TYPES =====
 interface DeckRef {
@@ -91,7 +93,7 @@ interface QuizPageProps {
   masteryWords?: any[]
   onExit: () => void
   onEditWord: (vocab: VocabularyItem) => void
-  speak: (word: string) => void
+  speak: (word: string, options?: any) => void
   submitProgress?: (wordId: string, skill: string, isCorrect: boolean, isHinted?: boolean) => void
   onQuizActiveChange?: (isActive: boolean) => void
   stopSpeaking?: () => void
@@ -204,9 +206,11 @@ const defaultSettings: QuizSettings = {
 
 // ===== COMPONENT =====
 export default function QuizPage({ vocabularies, decks, masteryWords, onExit, onEditWord, speak, stopSpeaking, submitProgress, onQuizActiveChange }: QuizPageProps) {
+  const { ttsAccent, ttsSettingsReady } = useGlobalData()
   const [settings, setSettings] = useState<QuizSettings>({ ...defaultSettings })
   const [activeSettings, setActiveSettings] = useState<QuizSettings | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [isTTSSettingsOpen, setIsTTSSettingsOpen] = useState(false)
   const [started, setStarted] = useState(false)
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -333,7 +337,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
   // Unified Auto-speak effect
   useEffect(() => {
-    if (!started || !settingsLoaded || answered) return;
+    if (!started || !settingsLoaded || answered || !ttsSettingsReady) return;
     
     if (spokenQuestionIdx.current === currentIdx) return;
 
@@ -341,10 +345,10 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     if (!q || !q.vocab || !q.vocab.word) return;
 
     if (q.type === 'listen' || autoPlayAudio) {
-      speak(q.vocab.word);
+      speak(q.vocab.word, { mode: q.type === 'listen' ? 'quiz-listen' : 'autoplay', source: 'quiz-question', ownerId: 'quiz-session' });
     }
     spokenQuestionIdx.current = currentIdx;
-  }, [currentIdx, started, questions, answered, autoPlayAudio, settingsLoaded, speak]);
+  }, [currentIdx, started, questions, answered, autoPlayAudio, settingsLoaded, speak, ttsSettingsReady]);
 
   // Focus fill input
   useEffect(() => {
@@ -569,7 +573,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                   <div className="quiz-review-word">
                     <strong>{q.vocab.word}</strong>
                     {q.vocab.pronunciation && <span className="quiz-review-pron">{q.vocab.pronunciation}</span>}
-                    <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)}>
+                    <button className="quiz-action-icon" onClick={() => speak(q.vocab.word, { mode: 'manual', source: 'quiz-review', ownerId: 'quiz-session' })}>
                       <SpeakerWaveIcon className="icon" />
                     </button>
                   </div>
@@ -941,7 +945,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     return (
       <>
         <div className="quiz-listen-prompt">
-          <button className="quiz-listen-replay" onClick={() => speak(q.vocab.word)}>
+          <button className="quiz-listen-replay" onClick={() => speak(q.vocab.word, { mode: 'manual', source: 'quiz-listen-replay', ownerId: 'quiz-session' })}>
             <SpeakerWaveIcon className="icon" />
             <span>Nghe lại</span>
           </button>
@@ -1045,7 +1049,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                   <div className="quiz-feedback-example-text">
                     <span className="text-dotted">{q.vocab.examples[0].en}</span>
                     <div className="quiz-feedback-actions">
-                      <button type="button" aria-label="Phát âm câu ví dụ" className="quiz-action-btn" onClick={() => speak(q.vocab.examples[0].en)}>
+                      <button type="button" aria-label="Phát âm câu ví dụ" className="quiz-action-btn" onClick={() => speak(q.vocab.examples[0].en, { mode: 'manual', source: 'quiz-example', ownerId: 'quiz-session' })}>
                         <SpeakerWaveIcon className="icon" />
                       </button>
                       {q.vocab.examples[0].vi && (
@@ -1195,6 +1199,24 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                     onChange={() => setSettings(s => ({ ...s, autoNext: !s.autoNext }))} />
                   <span>⏩ Tự động chuyển câu khi đúng</span>
                 </label>
+              </div>
+
+              {/* Âm thanh */}
+              <div className="quiz-settings-section">
+                <h4>Âm thanh</h4>
+                <div className="quiz-setting-option" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontWeight: 500 }}>Giọng phát âm</span>
+                    <span style={{ fontSize: '0.8rem', color: '#666' }}>{ttsAccent === 'en-GB' ? 'Anh-Anh' : 'Anh-Mỹ'}</span>
+                  </div>
+                  <button 
+                    className="btn-outline" 
+                    style={{ padding: '4px 8px', fontSize: 12 }}
+                    onClick={(e) => { e.stopPropagation(); setIsTTSSettingsOpen(true); }}
+                  >
+                    Đổi giọng
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1430,7 +1452,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                     AUTO
                   </div>
                 </button>
-                <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)} title="Phát âm">
+                <button className="quiz-action-icon" onClick={() => speak(q.vocab.word, { mode: 'manual', source: 'quiz-question', ownerId: 'quiz-session' })} title="Phát âm">
                   <SpeakerWaveIcon className="icon" />
                 </button>
               </>
@@ -1480,6 +1502,11 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
       {/* Settings Modal */}
       {renderSettingsModal()}
+
+      {/* TTS Settings Modal */}
+      {isTTSSettingsOpen && (
+        <TTSSettingsModal onClose={() => setIsTTSSettingsOpen(false)} />
+      )}
     </div>
   )
 }
