@@ -44,7 +44,7 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
   const [fcFlipped, setFcFlipped] = useState(false)
   const [fcShuffled, setFcShuffled] = useState(false)
   const [fcOrder, setFcOrder] = useState<number[]>([])
-  const [fcAutoSpeak, setFcAutoSpeak] = useState(false)
+  const [fcAutoSpeak, setFcAutoSpeak] = useState(true)
   const [fcShowSettings, setFcShowSettings] = useState(false)
   const [fcFrontContent, setFcFrontContent] = useState<'term' | 'definition'>('term')
   const [fcImageDisplay, setFcImageDisplay] = useState<'definition' | 'term' | 'hidden' | 'blurred'>('term')

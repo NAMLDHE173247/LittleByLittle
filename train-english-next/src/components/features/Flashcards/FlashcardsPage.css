@@ -44,21 +44,21 @@
 }
 
 .fc-mode-btn:hover {
-  background: var(--accent-light);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: rgba(17, 24, 39, 0.04);
+  border-color: rgba(17, 24, 39, 0.3);
+  color: var(--text-primary);
   box-shadow: var(--shadow-card-hover);
 }
 
 .fc-mode-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-  box-shadow: var(--shadow-card-hover);
+  background: var(--quiz-accent, #5B4CF0);
+  border-color: var(--quiz-accent, #5B4CF0);
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(91, 76, 240, 0.25);
 }
 
 .fc-mode-btn.active .fc-mode-icon {
-  stroke: white;
+  stroke: #FFFFFF;
 }
 
 .fc-mode-icon {

@@ -16,9 +16,16 @@ import {
   ArrowsRightLeftIcon,
   ListBulletIcon,
   FunnelIcon,
-  FolderIcon,
-  BoltIcon,
-  LanguageIcon,
+  ChevronDownIcon,
+  AdjustmentsHorizontalIcon,
+  InformationCircleIcon,
+  BookOpenIcon,
+  ChatBubbleBottomCenterTextIcon,
+  TrophyIcon,
+  CheckCircleIcon,
+  DocumentTextIcon,
+  ForwardIcon,
+  CommandLineIcon
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { checkAnswer } from '@/lib/utils/answerUtils'
@@ -326,6 +333,10 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setSettingsLoaded(true)
   }, [])
 
+  const updateSetting = useCallback((key: keyof QuizSettings, value: any) => {
+    setSettings(prev => ({ ...prev, [key]: value }))
+  }, [])
+
   const toggleAutoPlayAudio = (e: React.MouseEvent) => {
     e.stopPropagation()
     setAutoPlayAudio(prev => {
@@ -357,6 +368,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     }
   }, [currentIdx, started, questions, answered])
 
+  const supportsRetryOnWrong = (types: string[]) => types.includes('fill')
+
   const startQuiz = useCallback(() => {
     stopSpeaking?.()
     // Allow starting with at least 1 word for multiple/listen too
@@ -364,7 +377,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
     const qs = buildQuestions(filteredWords, settings, vocabularies)
     setQuestions(qs)
-    setActiveSettings(settings)
+    
+    const activeSet = { ...settings }
+    if (!supportsRetryOnWrong(activeSet.questionTypes)) {
+      activeSet.requireRetypeOnWrong = false
+    }
+    setActiveSettings(activeSet)
     setCurrentIdx(0)
     setSelected(null)
     setAnswered(false)
@@ -709,84 +727,276 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     return (
       <div className="quiz-start">
         <div className="quiz-start-card">
-          <div className="quiz-start-icon">
-            <RocketLaunchIcon className="icon" />
-          </div>
-          <h2>Luyện tập từ vựng</h2>
-          <p className="quiz-start-subtitle">Luyện tập kiến thức từ vựng qua nhiều chế độ câu hỏi</p>
-          
           <div className="quiz-start-body">
             <div className="quiz-start-stats">
-              <div className="quiz-start-info">
-                <div className="quiz-info-item">
+              <div className="quiz-info-item">
+                <div className="quiz-info-icon-wrapper">
+                  <BookOpenIcon className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div className="quiz-info-text">
                   <span className="quiz-info-num">{availableCount}</span>
                   <span className="quiz-info-label">từ khả dụng</span>
                 </div>
-                <div className="quiz-info-item">
+              </div>
+              <div className="quiz-info-item">
+                <div className="quiz-info-icon-wrapper">
+                  <ChatBubbleBottomCenterTextIcon className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div className="quiz-info-text">
                   <span className="quiz-info-num">
                     {Math.min(settings.questionCount, availableCount)}
                   </span>
                   <span className="quiz-info-label">câu hỏi</span>
                 </div>
-                <div className="quiz-info-item">
+              </div>
+              <div className="quiz-info-item">
+                <div className="quiz-info-icon-wrapper">
+                  <TrophyIcon className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div className="quiz-info-text">
                   <span className="quiz-info-num">{settings.questionTypes.length}</span>
                   <span className="quiz-info-label">chế độ</span>
                 </div>
               </div>
             </div>
 
-            <div className="quiz-start-divider" />
-
             <div className="quiz-start-config">
-              <div className="quiz-start-config-title">Cấu hình hiện tại</div>
-              <div className="quiz-start-tags">
-                <div className="quiz-start-tag" title="Hướng hỏi">
-                  <ArrowsRightLeftIcon className="icon" />
-                  <span className="quiz-start-tag-label">Hướng:</span>
-                  <span className="quiz-start-tag-value">{settings.mode === 'en2vi' ? 'Anh → Việt' : 'Việt → Anh'}</span>
+              <div className="quiz-start-config-title">
+                <div className="flex items-center gap-2">
+                  <AdjustmentsHorizontalIcon className="w-5 h-5 text-indigo-500" />
+                  <span className="font-semibold text-[15px] text-gray-800 dark:text-gray-200">Thiết lập buổi luyện</span>
                 </div>
-                <div className="quiz-start-tag" title="Loại câu hỏi">
-                  <ListBulletIcon className="icon" />
-                  <span className="quiz-start-tag-label">Dạng:</span>
-                  <span className="quiz-start-tag-value">
-                    {settings.questionTypes.map(t => t === 'multiple' ? 'Trắc nghiệm' : t === 'fill' ? 'Điền từ' : 'Nghe').join(' · ')}
-                  </span>
+                <div className="text-[13px] text-gray-500 dark:text-gray-400 font-normal">Điều chỉnh trước khi bắt đầu</div>
+              </div>
+              
+              <div className="quiz-config-grid">
+                <div className="quiz-config-field" title="Hướng hỏi">
+                  <span className="quiz-config-label">Hướng</span>
+                  <div className="quiz-config-select-wrapper">
+                    <select
+                      className="quiz-config-select"
+                      value={settings.mode}
+                      onChange={e => updateSetting('mode', e.target.value)}
+                    >
+                      <option value="en2vi">Anh → Việt</option>
+                      <option value="vi2en">Việt → Anh</option>
+                      <option value="mixed">Trộn lẫn</option>
+                    </select>
+                    <ChevronDownIcon className="quiz-config-select-icon" />
+                  </div>
                 </div>
-                <div className="quiz-start-tag" title={getFilterText()}>
-                  <FunnelIcon className="icon" />
-                  <span className="quiz-start-tag-label">Phạm vi:</span>
-                  <span className="quiz-start-tag-value">{getFilterText()}</span>
+
+                <div className="quiz-config-field" title="Nguồn từ">
+                  <span className="quiz-config-label">Nguồn</span>
+                  <div className="quiz-config-select-wrapper">
+                    <select
+                      className="quiz-config-select"
+                      value={settings.sourceMode}
+                      onChange={e => updateSetting('sourceMode', e.target.value)}
+                    >
+                      <option value="random">Ngẫu nhiên</option>
+                      <option value="weak">Từ yếu</option>
+                      <option value="due">Cần ôn tập</option>
+                      <option value="deck">Chỉ trong bộ</option>
+                    </select>
+                    <ChevronDownIcon className="quiz-config-select-icon" />
+                  </div>
                 </div>
-                <div className="quiz-start-tag" title="Nguồn từ">
-                  <FolderIcon className="icon" />
-                  <span className="quiz-start-tag-label">Nguồn:</span>
-                  <span className="quiz-start-tag-value">{getSourceModeText()}</span>
+
+                <div className="quiz-config-field" title="Bộ thẻ">
+                  <span className="quiz-config-label">Bộ thẻ</span>
+                  <div className="quiz-config-select-wrapper">
+                    <select
+                      className="quiz-config-select"
+                      value={settings.filterDeck}
+                      onChange={e => updateSetting('filterDeck', e.target.value)}
+                    >
+                      <option value="">Tất cả</option>
+                      {decks.map(d => (
+                        <option key={d._id} value={d._id}>{d.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDownIcon className="quiz-config-select-icon" />
+                  </div>
                 </div>
-                
-                {settings.shuffle && (
-                  <div className="quiz-start-tag quiz-start-tag--option">
-                    <BoltIcon className="icon" />
-                    <span className="quiz-start-tag-value">Trộn câu hỏi</span>
+
+                <div className="quiz-config-field" title="Độ thành thạo">
+                  <span className="quiz-config-label">Độ thành thạo</span>
+                  <div className="quiz-config-select-wrapper">
+                    <select
+                      className="quiz-config-select"
+                      value={settings.filterTier}
+                      onChange={e => updateSetting('filterTier', e.target.value)}
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="not_started">Chưa học (0)</option>
+                      <option value="learning">Đang học (1-39)</option>
+                      <option value="familiar">Khá quen (40-79)</option>
+                      <option value="mastered">Thành thạo (80+)</option>
+                    </select>
+                    <ChevronDownIcon className="quiz-config-select-icon" />
                   </div>
-                )}
-                {settings.autoNext && (
-                  <div className="quiz-start-tag quiz-start-tag--option">
-                    <BoltIcon className="icon" />
-                    <span className="quiz-start-tag-value">Tự động chuyển</span>
+                </div>
+              </div>
+
+              {(() => {
+                const extraCount = (settings.filterLevel ? 1 : 0) + (settings.filterTopic ? 1 : 0) + (settings.filterPOS ? 1 : 0)
+                if (extraCount === 0) return null
+                return (
+                  <div className="w-full flex justify-center" style={{ marginBottom: '24px' }}>
+                    <div 
+                      className="text-[13px] text-indigo-600 bg-indigo-50 font-medium hover:bg-indigo-100 border border-indigo-100 dark:border-indigo-900/50 dark:text-indigo-400 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 cursor-pointer flex justify-center items-center gap-2 py-1.5 px-4 rounded-full transition-colors shadow-sm"
+                      onClick={() => setShowSettings(true)}
+                    >
+                      <FunnelIcon className="w-4 h-4" />
+                      Đang áp dụng thêm {extraCount} bộ lọc khác
+                      <ChevronDownIcon className="w-3 h-3 opacity-70" />
+                    </div>
                   </div>
-                )}
-                {autoPlayAudio && (
-                  <div className="quiz-start-tag quiz-start-tag--option">
-                    <BoltIcon className="icon" />
-                    <span className="quiz-start-tag-value">Tự động phát âm</span>
+                )
+              })()}
+
+              <div style={{ marginBottom: '28px' }}>
+                <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px' }}>Loại câu hỏi</span>
+                <div className="flex gap-3">
+                  {[
+                    { id: 'multiple', label: 'Trắc nghiệm', icon: null },
+                    { id: 'fill', label: 'Điền từ', icon: DocumentTextIcon },
+                    { id: 'listen', label: 'Nghe', icon: SpeakerWaveIcon }
+                  ].map(type => {
+                    const isActive = settings.questionTypes.includes(type.id as any)
+                    const Icon = type.icon;
+                    return (
+                      <button
+                        key={type.id}
+                        className={`flex-1 px-4 text-[15px] font-medium flex items-center justify-center gap-2 quiz-type-btn ${
+                          isActive ? 'quiz-type-btn-active' : ''
+                        }`}
+                        style={{ padding: '14px 0', borderRadius: '9999px' }}
+                        onClick={() => {
+                          const newTypes = isActive 
+                            ? settings.questionTypes.filter(t => t !== type.id)
+                            : [...settings.questionTypes, type.id as any]
+                          if (newTypes.length > 0) updateSetting('questionTypes', newTypes)
+                        }}
+                      >
+                        {isActive && <CheckCircleIcon className="w-5 h-5 quiz-type-icon" />}
+                        {Icon && <Icon className="w-5 h-5 quiz-type-icon" />}
+                        {type.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '32px' }}>
+                <div className="flex justify-between items-end mb-2" style={{ marginBottom: '12px' }}>
+                  <span className="quiz-config-label">Số câu hỏi</span>
+                  <span className="text-[12px] text-gray-500">{Math.min(settings.questionCount, availableCount)} / {availableCount} từ khả dụng</span>
+                </div>
+                <div className="flex p-1 mt-1 quiz-segmented-container">
+                  {[10, 20, 30, 50, 999].map(num => {
+                    const isDisabled = num !== 999 && availableCount < num && availableCount > 0
+                    const isActive = settings.questionCount === num || (num === 999 && settings.questionCount > 50)
+                    return (
+                      <button
+                        key={num}
+                        disabled={isDisabled}
+                        className={`flex-1 text-[15px] font-medium quiz-segmented-item ${
+                          isActive ? 'quiz-segmented-active' : ''
+                        }`}
+                        style={{ padding: '12px 0', borderRadius: '6px' }}
+                        onClick={() => updateSetting('questionCount', num)}
+                      >
+                        {num === 999 ? 'Tất cả' : num}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              
+              <div className="quiz-config-toggles">
+                <div className="quiz-toggle-card">
+                  <div className="quiz-toggle-info-wrapper">
+                    <div className="quiz-toggle-icon-bg">
+                      <ArrowsRightLeftIcon className="w-5 h-5" />
+                    </div>
+                    <div className="quiz-toggle-info">
+                      <span className="quiz-toggle-title">Trộn câu hỏi</span>
+                    </div>
                   </div>
-                )}
-                {settings.requireRetypeOnWrong && (
-                  <div className="quiz-start-tag quiz-start-tag--option">
-                    <BoltIcon className="icon" />
-                    <span className="quiz-start-tag-value">Gõ lại khi sai</span>
+                  <button 
+                    className={`ui-switch ${settings.shuffle ? 'active' : ''}`}
+                    onClick={() => updateSetting('shuffle', !settings.shuffle)}
+                    role="switch"
+                    aria-checked={settings.shuffle}
+                  >
+                    <span className="ui-switch-knob" />
+                  </button>
+                </div>
+
+                <div className="quiz-toggle-card">
+                  <div className="quiz-toggle-info-wrapper">
+                    <div className="quiz-toggle-icon-bg">
+                      <ForwardIcon className="w-5 h-5" />
+                    </div>
+                    <div className="quiz-toggle-info">
+                      <span className="quiz-toggle-title">Tự động chuyển</span>
+                    </div>
                   </div>
-                )}
+                  <button 
+                    className={`ui-switch ${settings.autoNext ? 'active' : ''}`}
+                    onClick={() => updateSetting('autoNext', !settings.autoNext)}
+                    role="switch"
+                    aria-checked={settings.autoNext}
+                  >
+                    <span className="ui-switch-knob" />
+                  </button>
+                </div>
+
+                <div className="quiz-toggle-card">
+                  <div className="quiz-toggle-info-wrapper">
+                    <div className="quiz-toggle-icon-bg">
+                      <SpeakerWaveIcon className="w-5 h-5" />
+                    </div>
+                    <div className="quiz-toggle-info">
+                      <span className="quiz-toggle-title">Tự động phát âm</span>
+                    </div>
+                  </div>
+                  <button 
+                    className={`ui-switch ${autoPlayAudio ? 'active' : ''}`}
+                    onClick={(e) => toggleAutoPlayAudio(e as any)}
+                    role="switch"
+                    aria-checked={autoPlayAudio}
+                  >
+                    <span className="ui-switch-knob" />
+                  </button>
+                </div>
+
+                <div className={`quiz-toggle-card ${!supportsRetryOnWrong(settings.questionTypes) ? 'quiz-disabled-wrapper quiz-disabled-card' : ''}`} title={!supportsRetryOnWrong(settings.questionTypes) ? 'Chỉ hỗ trợ cho dạng điền từ' : ''}>
+                  <div className="quiz-toggle-info-wrapper">
+                    <div className="quiz-toggle-icon-bg">
+                      <CommandLineIcon className="w-5 h-5" />
+                    </div>
+                    <div className="quiz-toggle-info">
+                      <div className="flex items-center gap-1">
+                        <span className={`quiz-toggle-title ${!supportsRetryOnWrong(settings.questionTypes) ? 'text-gray-400 dark:text-gray-500' : ''}`}>Gõ lại khi sai</span>
+                        {!supportsRetryOnWrong(settings.questionTypes) && (
+                          <InformationCircleIcon className="w-3.5 h-3.5 text-gray-400" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    className={`ui-switch ${settings.requireRetypeOnWrong ? 'active' : ''}`}
+                    onClick={() => updateSetting('requireRetypeOnWrong', !settings.requireRetypeOnWrong)}
+                    role="switch"
+                    aria-checked={settings.requireRetypeOnWrong}
+                    disabled={!supportsRetryOnWrong(settings.questionTypes)}
+                  >
+                    <span className="ui-switch-knob" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -798,11 +1008,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
           )}
 
           <div className="quiz-start-actions">
-            <button className="btn-primary quiz-start-btn" onClick={startQuiz} disabled={!canStart}>
+            <button className="quiz-start-btn quiz-btn-primary" onClick={startQuiz} disabled={!canStart}>
               Bắt đầu Luyện tập
             </button>
-            <button className="btn-outline" onClick={() => setShowSettings(true)}>
-              <Cog6ToothIcon className="icon icon-inline" /> Cài đặt
+            <button className="quiz-btn-secondary flex items-center justify-center gap-2 px-6 rounded-xl h-[48px]" onClick={() => setShowSettings(true)}>
+              <Cog6ToothIcon className="w-5 h-5" />
+              Cài đặt nâng cao
             </button>
           </div>
         </div>
