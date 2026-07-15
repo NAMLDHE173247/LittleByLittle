@@ -18,7 +18,8 @@ import {
   ChatBubbleOvalLeftIcon,
   DocumentTextIcon,
   QuestionMarkCircleIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  RocketLaunchIcon
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { useGlobalData } from '@/components/providers/GlobalDataProvider'
@@ -31,10 +32,12 @@ interface FlashcardsPageProps {
   vocabularies: any[]
   submitProgress?: (wordId: string, skill: string, isCorrect: boolean) => void
   onModeChange?: (mode: StudyMode) => void
+  onQuizActiveChange?: (isActive: boolean) => void
 }
 
-export default function FlashcardsPage({ vocabularies, submitProgress, onModeChange }: FlashcardsPageProps) {
+export default function FlashcardsPage({ vocabularies, submitProgress, onModeChange, onQuizActiveChange }: FlashcardsPageProps) {
   const [activeMode, setActiveMode] = useState<StudyMode>('learn')
+  const [isQuizStarted, setIsQuizStarted] = useState(false)
   const { decks, masteryWords, openEditModal, speak } = useGlobalData()
   const [fcIndex, setFcIndex] = useState(0)
   const [fcFlipped, setFcFlipped] = useState(false)
@@ -148,7 +151,7 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
     { key: 'grammar',   label: 'Ngữ pháp',   icon: BookOpenIcon },
     { key: 'reading',   label: 'Đọc hiểu',   icon: DocumentTextIcon },
     { key: 'learn',     label: 'Học',         icon: AcademicCapIcon },
-    { key: 'quiz',      label: 'Học Quiz',   icon: QuestionMarkCircleIcon },
+    { key: 'quiz',      label: 'Luyện tập',   icon: RocketLaunchIcon },
     { key: 'test',      label: 'Kiểm tra',   icon: DocumentTextIcon },
     { key: 'dictation', label: 'Nghe Chép',  icon: Squares2X2Icon },
   ]
@@ -156,7 +159,8 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
   return (
     <div className="fc-page">
       {/* Study Mode Buttons */}
-      <div className="fc-mode-bar">
+      {!isQuizStarted && (
+        <div className="fc-mode-bar">
         {studyModes.map(mode => (
           <button 
             key={mode.key} 
@@ -175,7 +179,8 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
             <span>{mode.label}</span>
           </button>
         ))}
-      </div>
+        </div>
+      )}
 
       {activeMode === 'quiz' && (
         <div className="fc-quiz-area">
@@ -186,10 +191,16 @@ export default function FlashcardsPage({ vocabularies, submitProgress, onModeCha
             onExit={() => {
               setActiveMode('learn');
               if (onModeChange) onModeChange('learn');
+              setIsQuizStarted(false);
+              onQuizActiveChange?.(false);
             }}
             onEditWord={openEditModal}
             speak={speak}
             submitProgress={submitProgress}
+            onQuizActiveChange={(isActive) => {
+              setIsQuizStarted(isActive)
+              onQuizActiveChange?.(isActive)
+            }}
           />
         </div>
       )}

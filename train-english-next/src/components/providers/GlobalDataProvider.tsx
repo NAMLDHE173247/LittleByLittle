@@ -231,28 +231,105 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     setFormError('');
   };
 
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const speakTimeout = useRef<NodeJS.Timeout | null>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speakTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const watchdogTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const requestIdRef = useRef<number>(0);
 
-  const speak = useCallback((text: string) => {
+  const loadVoices = useCallback(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      if (speakTimeout.current) clearTimeout(speakTimeout.current);
-      speakTimeout.current = setTimeout(() => {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utteranceRef.current = utterance; // Prevent garbage collection
-        utterance.lang = 'en-US';
-        utterance.rate = 0.9;
-        utterance.pitch = 1;
-        const voices = window.speechSynthesis.getVoices();
-        const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
-          || voices.find(v => v.lang.startsWith('en-US'))
-          || voices.find(v => v.lang.startsWith('en'));
-        if (enVoice) utterance.voice = enVoice;
-        window.speechSynthesis.speak(utterance);
-      }, 100); // 100ms debounce
+      voicesRef.current = window.speechSynthesis.getVoices();
     }
   }, []);
+
+  const cancelSpeech = useCallback(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      requestIdRef.current += 1;
+      if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+      if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
+      window.speechSynthesis.cancel();
+      currentUtteranceRef.current = null;
+    }
+  }, []);
+
+  const stopSpeaking = cancelSpeech;
+
+  const speak = useCallback((text: string, isRetry = false) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    if (!isRetry) {
+      requestIdRef.current += 1;
+      if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+      if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
+      window.speechSynthesis.cancel();
+    }
+
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+
+    const currentReqId = requestIdRef.current;
+
+    speakTimeoutRef.current = setTimeout(() => {
+      if (currentReqId !== requestIdRef.current) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+
+      const voices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
+        || voices.find(v => v.lang.startsWith('en-US'))
+        || voices.find(v => v.lang.startsWith('en'));
+      if (enVoice) utterance.voice = enVoice;
+
+      let hasStarted = false;
+
+      utterance.onstart = () => {
+        hasStarted = true;
+        if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
+      };
+
+      utterance.onend = () => {
+        if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
+        if (currentUtteranceRef.current === utterance) {
+          currentUtteranceRef.current = null;
+        }
+      };
+
+      utterance.onerror = (e) => {
+        if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
+        if (currentReqId !== requestIdRef.current) return; 
+        if (e.error === 'interrupted' || e.error === 'canceled') return; 
+        
+        console.warn('SpeechSynthesis error:', e.error);
+        if (!hasStarted && !isRetry) {
+          cancelSpeech();
+          speak(cleanText, true); 
+        }
+      };
+
+      currentUtteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+
+      if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
+      watchdogTimeoutRef.current = setTimeout(() => {
+        if (currentReqId !== requestIdRef.current) return;
+        if (!hasStarted && !isRetry) {
+          console.warn('SpeechSynthesis watchdog triggered, retrying...');
+          cancelSpeech();
+          speak(cleanText, true);
+        }
+      }, 1500);
+
+    }, 50);
+
+  }, [cancelSpeech]);
 
   const getLevelColor = (level: string) => {
     const colors: Record<string, string> = {
@@ -275,12 +352,14 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
+      loadVoices();
+      window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+      return () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+        cancelSpeech();
       };
     }
-  }, []);
+  }, [loadVoices, cancelSpeech]);
 
   useEffect(() => {
     fetchMetadata();
@@ -372,7 +451,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     
     // Actions
     fetchMetadata, fetchDecks, fetchProgress, fetchMasteryWords, fetchVocabularies,
-    openAddModal, openEditModal, closeModal, speak, getLevelColor, handleSave
+    openAddModal, openEditModal, closeModal, speak, stopSpeaking, getLevelColor, handleSave
   };
 
   return (

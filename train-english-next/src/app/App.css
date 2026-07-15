@@ -36,6 +36,15 @@
   --stat-purple: #8B5CF6;
   --stat-orange: #F59E0B;
 
+  --feedback-correct-bg: rgba(34, 197, 94, 0.08);
+  --feedback-correct-border: rgba(34, 197, 94, 0.2);
+  --feedback-correct-text: #16A34A;
+  --feedback-wrong-bg: rgba(239, 68, 68, 0.08);
+  --feedback-wrong-border: rgba(239, 68, 68, 0.2);
+  --feedback-wrong-text: #DC2626;
+  --quiz-continue-bg: #E0E7FF;
+  --quiz-continue-text: #1E3A8A;
+
   --radius: 8px;
   --radius-lg: 12px;
   --sidebar-width: 220px;
@@ -73,6 +82,15 @@
   --border-input: #44465A;
   --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.15);
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.2);
+
+  --feedback-correct-bg: rgba(34, 197, 94, 0.15);
+  --feedback-correct-border: rgba(34, 197, 94, 0.3);
+  --feedback-correct-text: #4ADE80;
+  --feedback-wrong-bg: rgba(239, 68, 68, 0.15);
+  --feedback-wrong-border: rgba(239, 68, 68, 0.3);
+  --feedback-wrong-text: #F87171;
+  --quiz-continue-bg: rgba(129, 140, 248, 0.2);
+  --quiz-continue-text: #A5B4FC;
 }
 
 /* ===================================================

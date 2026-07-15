@@ -9,9 +9,16 @@ import {
   CheckIcon,
   XMarkIcon,
   ArrowPathIcon,
+  RocketLaunchIcon,
   QuestionMarkCircleIcon,
   EyeIcon,
   LightBulbIcon,
+  ArrowsRightLeftIcon,
+  ListBulletIcon,
+  FunnelIcon,
+  FolderIcon,
+  BoltIcon,
+  LanguageIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { checkAnswer } from '@/lib/utils/answerUtils'
@@ -86,6 +93,8 @@ interface QuizPageProps {
   onEditWord: (vocab: VocabularyItem) => void
   speak: (word: string) => void
   submitProgress?: (wordId: string, skill: string, isCorrect: boolean, isHinted?: boolean) => void
+  onQuizActiveChange?: (isActive: boolean) => void
+  stopSpeaking?: () => void
 }
 
 // ===== HELPERS =====
@@ -194,7 +203,7 @@ const defaultSettings: QuizSettings = {
 }
 
 // ===== COMPONENT =====
-export default function QuizPage({ vocabularies, decks, masteryWords, onExit, onEditWord, speak, submitProgress }: QuizPageProps) {
+export default function QuizPage({ vocabularies, decks, masteryWords, onExit, onEditWord, speak, stopSpeaking, submitProgress, onQuizActiveChange }: QuizPageProps) {
   const [settings, setSettings] = useState<QuizSettings>({ ...defaultSettings })
   const [activeSettings, setActiveSettings] = useState<QuizSettings | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -213,9 +222,13 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   const [showReview, setShowReview] = useState(false)
   const [hintUsed, setHintUsed] = useState(false)
   const [showHintText, setShowHintText] = useState(false)
+  const [showExampleTranslation, setShowExampleTranslation] = useState(false)
+  const [autoPlayAudio, setAutoPlayAudio] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   const fillInputRef = useRef<HTMLInputElement>(null)
   const autoNextTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const spokenQuestionIdx = useRef<number>(-1)
 
   // Map progress to easy lookup
   const progressMap = useMemo(() => {
@@ -289,16 +302,49 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
   // Clean up timer on unmount
   useEffect(() => {
-    return () => { if (autoNextTimer.current) clearTimeout(autoNextTimer.current) }
+    return () => {
+      if (autoNextTimer.current) clearTimeout(autoNextTimer.current)
+      stopSpeaking?.()
+    }
+  }, [stopSpeaking])
+
+  // Notify parent when quiz active state changes
+  useEffect(() => {
+    onQuizActiveChange?.(started)
+  }, [started, onQuizActiveChange])
+
+  // Load autoPlayAudio settings
+  useEffect(() => {
+    const saved = localStorage.getItem('quizAutoPlayAudio')
+    if (saved !== null) {
+      setAutoPlayAudio(saved === 'true')
+    }
+    setSettingsLoaded(true)
   }, [])
 
-  // Auto-speak for listen mode
+  const toggleAutoPlayAudio = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setAutoPlayAudio(prev => {
+      const next = !prev
+      localStorage.setItem('quizAutoPlayAudio', String(next))
+      return next
+    })
+  }
+
+  // Unified Auto-speak effect
   useEffect(() => {
-    if (started && questions[currentIdx]?.type === 'listen' && !answered) {
-      const q = questions[currentIdx]
-      speak(q.vocab.word)
+    if (!started || !settingsLoaded || answered) return;
+    
+    if (spokenQuestionIdx.current === currentIdx) return;
+
+    const q = questions[currentIdx];
+    if (!q || !q.vocab || !q.vocab.word) return;
+
+    if (q.type === 'listen' || autoPlayAudio) {
+      speak(q.vocab.word);
     }
-  }, [currentIdx, started, questions])
+    spokenQuestionIdx.current = currentIdx;
+  }, [currentIdx, started, questions, answered, autoPlayAudio, settingsLoaded, speak]);
 
   // Focus fill input
   useEffect(() => {
@@ -308,6 +354,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   }, [currentIdx, started, questions, answered])
 
   const startQuiz = useCallback(() => {
+    stopSpeaking?.()
     // Allow starting with at least 1 word for multiple/listen too
     if (filteredWords.length < 1) return
 
@@ -325,10 +372,13 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setShowReview(false)
     setHintUsed(false)
     setShowHintText(false)
+    setShowExampleTranslation(false)
+    spokenQuestionIdx.current = -1
     setStarted(true)
   }, [filteredWords, settings, vocabularies])
 
   const handleRestart = () => {
+    stopSpeaking?.()
     setStarted(false)
     setCurrentIdx(0)
     setSelected(null)
@@ -341,6 +391,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setShowReview(false)
     setHintUsed(false)
     setShowHintText(false)
+    setShowExampleTranslation(false)
+    spokenQuestionIdx.current = -1
   }
 
   const goNext = useCallback(() => {
@@ -353,7 +405,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setFillCorrect(null)
     setHintUsed(false)
     setShowHintText(false)
-  }, [])
+    setShowExampleTranslation(false)
+  }, [stopSpeaking])
 
   const handleNext = goNext
 
@@ -555,6 +608,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
   // ===== RENDER: Completion Screen =====
   if (started && currentIdx >= questions.length) {
+    stopSpeaking?.()
     const pct = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0
     const emoji = pct >= 80 ? '🎉' : pct >= 50 ? '👍' : '💪'
     return (
@@ -617,28 +671,119 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     const needsMultiple = settings.questionTypes.some(t => t !== 'fill')
     const canStart = needsMultiple ? availableCount >= 4 : availableCount >= 1
 
+    const getFilterText = () => {
+      const filters: string[] = []
+      if (settings.filterTier && settings.filterTier !== 'all') {
+        const tierMap = { not_started: 'Chưa học', learning: 'Đang học', familiar: 'Đã quen', mastered: 'Thành thạo' }
+        filters.push(tierMap[settings.filterTier as keyof typeof tierMap])
+      }
+      if (settings.filterDeck) {
+        const deck = decks.find(d => d._id === settings.filterDeck)
+        if (deck) filters.push(deck.name)
+      }
+      if (settings.filterLevel) filters.push(settings.filterLevel)
+      if (settings.filterTopic) filters.push(settings.filterTopic)
+      if (settings.filterPOS) filters.push(settings.filterPOS)
+      if (settings.filterStarredOnly) filters.push('Đã đánh dấu')
+
+      if (filters.length === 0) return 'Tất cả từ vựng'
+      if (filters.length === 1) return filters[0]
+      return `${filters[0]} · ${filters[1]}` + (filters.length > 2 ? ` (+${filters.length - 2})` : '')
+    }
+
+    const getSourceModeText = () => {
+      const map = {
+        random: 'Ngẫu nhiên',
+        lowest_score: 'Điểm thấp nhất',
+        overdue: 'Đến hạn ôn tập',
+        newest: 'Mới nhất',
+        oldest: 'Cũ nhất'
+      }
+      return map[settings.sourceMode as keyof typeof map] || 'Ngẫu nhiên'
+    }
+
     return (
       <div className="quiz-start">
         <div className="quiz-start-card">
           <div className="quiz-start-icon">
-            <QuestionMarkCircleIcon className="icon" />
+            <RocketLaunchIcon className="icon" />
           </div>
-          <h2>Quiz từ vựng</h2>
+          <h2>Luyện tập từ vựng</h2>
           <p className="quiz-start-subtitle">Luyện tập kiến thức từ vựng qua nhiều chế độ câu hỏi</p>
-          <div className="quiz-start-info">
-            <div className="quiz-info-item">
-              <span className="quiz-info-num">{availableCount}</span>
-              <span className="quiz-info-label">từ khả dụng</span>
+          
+          <div className="quiz-start-body">
+            <div className="quiz-start-stats">
+              <div className="quiz-start-info">
+                <div className="quiz-info-item">
+                  <span className="quiz-info-num">{availableCount}</span>
+                  <span className="quiz-info-label">từ khả dụng</span>
+                </div>
+                <div className="quiz-info-item">
+                  <span className="quiz-info-num">
+                    {Math.min(settings.questionCount, availableCount)}
+                  </span>
+                  <span className="quiz-info-label">câu hỏi</span>
+                </div>
+                <div className="quiz-info-item">
+                  <span className="quiz-info-num">{settings.questionTypes.length}</span>
+                  <span className="quiz-info-label">chế độ</span>
+                </div>
+              </div>
             </div>
-            <div className="quiz-info-item">
-              <span className="quiz-info-num">
-                {Math.min(settings.questionCount, availableCount)}
-              </span>
-              <span className="quiz-info-label">câu hỏi</span>
-            </div>
-            <div className="quiz-info-item">
-              <span className="quiz-info-num">{settings.questionTypes.length}</span>
-              <span className="quiz-info-label">chế độ</span>
+
+            <div className="quiz-start-divider" />
+
+            <div className="quiz-start-config">
+              <div className="quiz-start-config-title">Cấu hình hiện tại</div>
+              <div className="quiz-start-tags">
+                <div className="quiz-start-tag" title="Hướng hỏi">
+                  <ArrowsRightLeftIcon className="icon" />
+                  <span className="quiz-start-tag-label">Hướng:</span>
+                  <span className="quiz-start-tag-value">{settings.mode === 'en2vi' ? 'Anh → Việt' : 'Việt → Anh'}</span>
+                </div>
+                <div className="quiz-start-tag" title="Loại câu hỏi">
+                  <ListBulletIcon className="icon" />
+                  <span className="quiz-start-tag-label">Dạng:</span>
+                  <span className="quiz-start-tag-value">
+                    {settings.questionTypes.map(t => t === 'multiple' ? 'Trắc nghiệm' : t === 'fill' ? 'Điền từ' : 'Nghe').join(' · ')}
+                  </span>
+                </div>
+                <div className="quiz-start-tag" title={getFilterText()}>
+                  <FunnelIcon className="icon" />
+                  <span className="quiz-start-tag-label">Phạm vi:</span>
+                  <span className="quiz-start-tag-value">{getFilterText()}</span>
+                </div>
+                <div className="quiz-start-tag" title="Nguồn từ">
+                  <FolderIcon className="icon" />
+                  <span className="quiz-start-tag-label">Nguồn:</span>
+                  <span className="quiz-start-tag-value">{getSourceModeText()}</span>
+                </div>
+                
+                {settings.shuffle && (
+                  <div className="quiz-start-tag quiz-start-tag--option">
+                    <BoltIcon className="icon" />
+                    <span className="quiz-start-tag-value">Trộn câu hỏi</span>
+                  </div>
+                )}
+                {settings.autoNext && (
+                  <div className="quiz-start-tag quiz-start-tag--option">
+                    <BoltIcon className="icon" />
+                    <span className="quiz-start-tag-value">Tự động chuyển</span>
+                  </div>
+                )}
+                {autoPlayAudio && (
+                  <div className="quiz-start-tag quiz-start-tag--option">
+                    <BoltIcon className="icon" />
+                    <span className="quiz-start-tag-value">Tự động phát âm</span>
+                  </div>
+                )}
+                {settings.requireRetypeOnWrong && (
+                  <div className="quiz-start-tag quiz-start-tag--option">
+                    <BoltIcon className="icon" />
+                    <span className="quiz-start-tag-value">Gõ lại khi sai</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -650,7 +795,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
           <div className="quiz-start-actions">
             <button className="btn-primary quiz-start-btn" onClick={startQuiz} disabled={!canStart}>
-              Bắt đầu Quiz
+              Bắt đầu Luyện tập
             </button>
             <button className="btn-outline" onClick={() => setShowSettings(true)}>
               <Cog6ToothIcon className="icon icon-inline" /> Cài đặt
@@ -871,20 +1016,70 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
     if (isCorrect && settings.autoNext) return null // auto-next will handle
 
+    const hasExample = q.vocab.examples && q.vocab.examples.length > 0
+    const hasSynonyms = q.vocab.synonyms && q.vocab.synonyms.length > 0
+    const hasExtra = hasExample || hasSynonyms
+
     return (
-      <div className={`quiz-feedback ${isCorrect ? 'quiz-feedback-correct' : ''}`}>
-        {q.vocab.imageUrl && (
-          <div className="quiz-feedback-image">
-            <img src={q.vocab.imageUrl} alt="" onError={e => (e.currentTarget.style.display = 'none')} />
+      <div className="quiz-feedback-section">
+        <div className={`quiz-feedback ${isCorrect ? 'quiz-feedback-correct' : 'quiz-feedback-wrong'}`}>
+          
+          <div className="quiz-feedback-content">
+            {q.vocab.imageUrl && (
+              <div className="quiz-feedback-image">
+                <img src={q.vocab.imageUrl} alt={q.vocab.word} onError={e => (e.currentTarget.style.display = 'none')} />
+              </div>
+            )}
+            <p className="quiz-feedback-text">
+              {isCorrect ? '✓ Chính xác!' : <>Đáp án đúng là: <strong>
+                {settings.mode === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}
+              </strong></>}
+            </p>
           </div>
-        )}
-        <p className="quiz-feedback-text" style={isCorrect ? { color: '#22C55E' } : undefined}>
-          {isCorrect ? '✓ Chính xác!' : <>Đáp án đúng là: <strong>
-            {settings.mode === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}
-          </strong></>}
-        </p>
+
+          {hasExtra && (
+            <div className="quiz-feedback-extra">
+              {hasExample && (
+                <div className="quiz-feedback-row quiz-feedback-example-block">
+                  <span className="quiz-feedback-label">Ví dụ: </span>
+                  <div className="quiz-feedback-example-text">
+                    <span className="text-dotted">{q.vocab.examples[0].en}</span>
+                    <div className="quiz-feedback-actions">
+                      <button type="button" aria-label="Phát âm câu ví dụ" className="quiz-action-btn" onClick={() => speak(q.vocab.examples[0].en)}>
+                        <SpeakerWaveIcon className="icon" />
+                      </button>
+                      {q.vocab.examples[0].vi && (
+                        <button 
+                          type="button" 
+                          aria-label="Hiện bản dịch câu ví dụ" 
+                          aria-pressed={showExampleTranslation} 
+                          className={`quiz-action-btn ${showExampleTranslation ? 'active' : ''}`} 
+                          onClick={() => setShowExampleTranslation(prev => !prev)}
+                        >
+                          <LanguageIcon className="icon" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {showExampleTranslation && q.vocab.examples[0].vi && (
+                    <div className="quiz-feedback-translation">
+                      {q.vocab.examples[0].vi}
+                    </div>
+                  )}
+                </div>
+              )}
+              {hasSynonyms && (
+                <div className="quiz-feedback-row">
+                  <span className="quiz-feedback-label">Từ đồng nghĩa: </span>
+                  <span className="text-dotted">{q.vocab.synonyms.join('; ')}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {(!activeSettings?.requireRetypeOnWrong || fillCorrect !== false || q.type !== 'fill') && (
-          <button className="btn-primary" onClick={handleNext}>
+          <button className="quiz-continue-btn" onClick={handleNext}>
             Tiếp tục
           </button>
         )}
@@ -1214,9 +1409,31 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
               </button>
             )}
             {q.type !== 'listen' && (
-              <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)} title="Phát âm">
-                <SpeakerWaveIcon className="icon" />
-              </button>
+              <>
+                <button
+                  className={`quiz-action-icon ${autoPlayAudio ? 'active' : ''}`}
+                  onClick={toggleAutoPlayAudio}
+                  title={autoPlayAudio ? "Tắt tự động phát âm" : "Bật tự động phát âm"}
+                  aria-label={autoPlayAudio ? "Tắt tự động phát âm" : "Bật tự động phát âm"}
+                  aria-pressed={autoPlayAudio}
+                >
+                  <div style={{
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    border: '1px solid currentColor',
+                    borderRadius: '4px',
+                    padding: '0 4px',
+                    lineHeight: '16px',
+                    opacity: autoPlayAudio ? 1 : 0.5,
+                    color: autoPlayAudio ? 'var(--accent)' : 'inherit'
+                  }}>
+                    AUTO
+                  </div>
+                </button>
+                <button className="quiz-action-icon" onClick={() => speak(q.vocab.word)} title="Phát âm">
+                  <SpeakerWaveIcon className="icon" />
+                </button>
+              </>
             )}
             <button
               className={`quiz-action-icon ${isStarred ? 'starred' : ''}`}

@@ -1,226 +1,386 @@
-/* DecksPage.css */
+/* DecksPage.css — Facebook-style Card Layout */
 
-/* Container adjustments to increase width */
+/* ====== Container ====== */
 .decks-container {
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+  padding: 0 16px;
 }
 
-.deck-grid {
+/* ====== Page Header — Facebook-like post creator bar ====== */
+.decks-page-header {
+  background: var(--bg-card);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+}
+
+.decks-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.decks-header-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.decks-header-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.btn-create-deck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(79, 70, 229, 0.25);
+}
+
+.btn-create-deck:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-create-deck .icon-inline {
+  width: 18px;
+  height: 18px;
+}
+
+/* ====== Feed / Card List ====== */
+.deck-feed {
   display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(4, 1fr);
-  width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
 }
 
-@media (max-width: 1200px) {
-  .deck-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 860px) {
-  .deck-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 500px) {
-  .deck-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
+/* ====== Empty State ====== */
 .deck-empty {
-  grid-column: 1 / -1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 80px 20px;
+  padding: 64px 24px;
   color: var(--text-muted);
   text-align: center;
-  gap: 16px;
-  background: var(--bg-card);
-  border: 1px dashed var(--border);
-  border-radius: 16px;
+  gap: 12px;
+}
+
+.deck-empty .empty-icon {
+  width: 56px;
+  height: 56px;
+  opacity: 0.18;
 }
 
 .deck-empty p {
   font-size: 15px;
-  max-width: 450px;
+  max-width: 380px;
   margin: 0;
+  line-height: 1.5;
 }
 
-.deck-card {
+/* ====== Facebook-style Card ====== */
+.fb-deck-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
-  min-height: 160px;
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  cursor: pointer;
 }
 
-/* Subtle accent line on top */
-.deck-card::before {
+.fb-deck-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* Cover / Banner */
+.fb-card-cover {
+  height: 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.fb-card-cover-gradient {
+  width: 100%;
+  height: 100%;
+  opacity: 0.85;
+  transition: opacity 0.3s ease;
+}
+
+.fb-deck-card:hover .fb-card-cover-gradient {
+  opacity: 1;
+}
+
+/* Pattern overlay for visual richness */
+.fb-card-cover::after {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  background-color: var(--deck-color, var(--primary-color));
-  opacity: 0.8;
-  transition: opacity 0.3s;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent,
+    transparent 20px,
+    rgba(255, 255, 255, 0.03) 20px,
+    rgba(255, 255, 255, 0.03) 40px
+  );
+  pointer-events: none;
 }
 
-.deck-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.1);
-  border-color: var(--deck-color, var(--primary-color));
-}
-
-.deck-card:hover::before {
-  opacity: 1;
-}
-
-.deck-card-header {
+/* Avatar / Deck Icon */
+.fb-card-avatar {
+  position: absolute;
+  bottom: -18px;
+  left: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 3px solid var(--bg-card);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  z-index: 2;
 }
 
-.deck-card-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--deck-color, var(--primary-color));
-  opacity: 0.9;
+.fb-card-avatar-icon {
+  width: 22px;
+  height: 22px;
 }
 
-.deck-card-name {
-  font-size: 18px;
-  font-weight: 600;
+/* Card Body */
+.fb-card-body {
+  padding: 26px 20px 16px;
+}
+
+.fb-card-title {
+  font-size: 17px;
+  font-weight: 700;
   color: var(--text-primary);
-  margin: 0;
-  flex: 1;
+  margin: 0 0 4px;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.deck-card-desc {
+.fb-card-desc {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  flex: 1; /* Pushes footer to bottom */
 }
 
-.deck-card-footer {
+/* Meta row — word count + date */
+.fb-card-meta {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
 }
 
-.deck-card-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.deck-card-count {
+.fb-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--primary-color);
-  background: var(--primary-light);
   padding: 4px 10px;
   border-radius: 20px;
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
+  background: var(--accent-light);
+  color: var(--accent);
 }
 
-.deck-card-date {
+.fb-card-badge .badge-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.fb-card-date {
   font-size: 12px;
   color: var(--text-muted);
-}
-
-.deck-card-actions {
   display: flex;
-  gap: 8px;
-  opacity: 0; /* Hide by default, show on hover */
-  transform: translateX(10px);
-  transition: all 0.3s ease;
+  align-items: center;
+  gap: 4px;
 }
 
-.deck-card:hover .deck-card-actions {
-  opacity: 1;
-  transform: translateX(0);
+.fb-card-date .date-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 0.6;
 }
 
-/* Touch devices always show actions */
-@media (hover: none) {
-  .deck-card-actions {
-    opacity: 1;
-    transform: translateX(0);
-  }
+/* ====== Divider ====== */
+.fb-card-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+  border: none;
 }
 
-.deck-action-btn {
-  display: inline-flex;
+/* ====== Action Bar — Facebook reactions row ====== */
+.fb-card-actions {
+  display: flex;
+  align-items: stretch;
+}
+
+.fb-action-btn {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  gap: 7px;
+  padding: 10px 0;
   border: none;
-  background: var(--bg-body);
+  background: transparent;
   color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  padding: 0;
+  transition: background 0.15s, color 0.15s;
+  position: relative;
 }
 
-.deck-action-btn .icon {
-  width: 16px;
-  height: 16px;
+.fb-action-btn::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 1px;
+  background: var(--border);
 }
 
-.deck-action-btn.edit:hover {
-  background: var(--primary-light);
-  color: var(--primary-color);
+.fb-action-btn:last-child::after {
+  display: none;
 }
 
-.deck-action-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.1);
+.fb-action-btn .action-icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+}
+
+.fb-action-btn:hover {
+  background: var(--bg-body);
+}
+
+.fb-action-btn.edit:hover {
+  color: var(--accent);
+}
+
+.fb-action-btn.delete:hover {
   color: #EF4444;
 }
 
-/* Create Deck button improvement */
-.btn-create-deck {
-  padding: 10px 20px;
-  font-weight: 600;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
-  transition: all 0.2s ease;
-  white-space: nowrap;
+.fb-action-btn.view:hover {
+  color: var(--stat-green);
 }
-.btn-create-deck:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.35);
+
+.fb-action-btn:hover .action-icon {
+  transform: scale(1.12);
+}
+
+/* ====== Responsive ====== */
+@media (max-width: 768px) {
+  .decks-container {
+    max-width: 100%;
+    padding: 0 8px;
+  }
+
+  .deck-feed {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+
+  .fb-card-cover {
+    height: 64px;
+  }
+
+  .fb-card-avatar {
+    width: 38px;
+    height: 38px;
+    bottom: -15px;
+    left: 16px;
+  }
+
+  .fb-card-avatar-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .fb-card-body {
+    padding: 22px 16px 14px;
+  }
+
+  .fb-action-btn span {
+    display: none;
+  }
+
+  .fb-action-btn {
+    padding: 12px 0;
+  }
+}
+
+/* ====== Progress bar in card ====== */
+.fb-card-progress-wrap {
+  padding: 0 20px 14px;
+}
+
+.fb-card-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-body);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fb-card-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  min-width: 2%;
+}
+
+.fb-card-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }

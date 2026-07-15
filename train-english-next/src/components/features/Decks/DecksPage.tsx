@@ -6,13 +6,34 @@ import {
   TrashIcon,
   XMarkIcon,
   ExclamationTriangleIcon,
-  SwatchIcon
+  SwatchIcon,
+  EyeIcon,
+  BookOpenIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/AuthContext'
 import './DecksPage.css'
 
 const BASE_URL = ''
 const DECK_API_URL = `${BASE_URL}/api/decks`
+
+// Preset gradient combos for card covers
+const COVER_GRADIENTS: Record<string, string> = {
+  '#3B82F6': 'linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)',
+  '#10B981': 'linear-gradient(135deg, #10B981 0%, #047857 100%)',
+  '#8B5CF6': 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)',
+  '#F59E0B': 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+  '#EF4444': 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
+  '#EC4899': 'linear-gradient(135deg, #EC4899 0%, #BE185D 100%)',
+  '#06B6D4': 'linear-gradient(135deg, #06B6D4 0%, #0E7490 100%)',
+  '#84CC16': 'linear-gradient(135deg, #84CC16 0%, #4D7C0F 100%)',
+  '#F97316': 'linear-gradient(135deg, #F97316 0%, #C2410C 100%)',
+  '#6366F1': 'linear-gradient(135deg, #6366F1 0%, #4338CA 100%)',
+}
+
+function getCoverGradient(color: string): string {
+  return COVER_GRADIENTS[color] || `linear-gradient(135deg, ${color} 0%, ${color}cc 100%)`
+}
 
 interface DecksPageProps {
   decks: any[]
@@ -24,13 +45,13 @@ interface DecksPageProps {
 
 export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchMetadata, onDeckClick }: DecksPageProps) {
   const { authHeaders } = useAuth()
-  
+
   const [showDeckModal, setShowDeckModal] = useState(false)
   const [editingDeck, setEditingDeck] = useState<any | null>(null)
   const [deckForm, setDeckForm] = useState({ name: '', description: '', color: '#3B82F6' })
   const [deckFormError, setDeckFormError] = useState('')
   const [savingDeck, setSavingDeck] = useState(false)
-  
+
   const [deleteDeckTarget, setDeleteDeckTarget] = useState<any | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -100,73 +121,125 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
 
   return (
     <div className="decks-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Bộ thẻ</h1>
-          <p className="page-subtitle">Sắp xếp từ vựng theo bộ thẻ học tập</p>
+      {/* ===== Facebook-style Page Header ===== */}
+      <div className="decks-page-header">
+        <div className="decks-header-info">
+          <h1 className="decks-header-title">Bộ thẻ</h1>
+          <p className="decks-header-subtitle">Sắp xếp từ vựng theo bộ thẻ học tập</p>
         </div>
-        <button className="btn-primary btn-create-deck" onClick={() => openDeckModal()}>
+        <button className="btn-create-deck" onClick={() => openDeckModal()}>
           <PlusIcon className="icon icon-inline" /> Tạo bộ thẻ
         </button>
       </div>
 
-      <div className="deck-grid">
+      {/* ===== Feed ===== */}
+      <div className="deck-feed">
         {decks.length === 0 ? (
           <div className="deck-empty">
-            <RectangleStackIcon className="icon" style={{ width: 64, height: 64, opacity: 0.2 }} />
+            <RectangleStackIcon className="empty-icon" />
             <p>Chưa có bộ thẻ nào. Hãy tạo bộ thẻ đầu tiên để sắp xếp từ vựng của bạn một cách khoa học nhé!</p>
-            <button className="btn-primary btn-create-deck" style={{ marginTop: '8px' }} onClick={() => openDeckModal()}>
+            <button className="btn-create-deck" style={{ marginTop: '4px' }} onClick={() => openDeckModal()}>
               <PlusIcon className="icon icon-inline" /> Tạo bộ thẻ ngay
             </button>
           </div>
         ) : (
-          decks.map(deck => (
-            <div 
-              key={deck._id} 
-              className="deck-card" 
-              style={{ '--deck-color': deck.color, cursor: onDeckClick ? 'pointer' : 'default' } as React.CSSProperties} 
-              onClick={() => onDeckClick && onDeckClick(deck._id)}
-            >
-              <div className="deck-card-header">
-                <div className="deck-card-color" style={{ backgroundColor: deck.color }} />
-                <h3 className="deck-card-name" title={deck.name}>{deck.name}</h3>
-              </div>
-              
-              {deck.description && (
-                <p className="deck-card-desc" title={deck.description}>{deck.description}</p>
-              )}
-              
-              <div className="deck-card-footer">
-                <div className="deck-card-stats">
-                  <span className="deck-card-count">{deck.wordCount || 0} từ</span>
-                  {deck.updatedAt && (
-                    <span className="deck-card-date">
-                      Cập nhật: {new Date(deck.updatedAt).toLocaleDateString('vi-VN')}
-                    </span>
-                  )}
+          decks.map(deck => {
+            const wordCount = deck.wordCount || 0
+            return (
+              <div
+                key={deck._id}
+                className="fb-deck-card"
+                onClick={() => onDeckClick && onDeckClick(deck._id)}
+              >
+                {/* Cover Banner */}
+                <div className="fb-card-cover">
+                  <div
+                    className="fb-card-cover-gradient"
+                    style={{ background: getCoverGradient(deck.color) }}
+                  />
+                  {/* Avatar */}
+                  <div className="fb-card-avatar" style={{ borderColor: 'var(--bg-card)' }}>
+                    <RectangleStackIcon className="fb-card-avatar-icon" style={{ color: deck.color }} />
+                  </div>
                 </div>
-                <div className="deck-card-actions">
-                  <button 
-                    className="deck-action-btn edit" 
-                    onClick={(e) => { e.stopPropagation(); openDeckModal(deck); }} 
+
+                {/* Card Body */}
+                <div className="fb-card-body">
+                  <h3 className="fb-card-title">{deck.name}</h3>
+                  {deck.description && (
+                    <p className="fb-card-desc">{deck.description}</p>
+                  )}
+
+                  <div className="fb-card-meta">
+                    <span className="fb-card-badge">
+                      <BookOpenIcon className="badge-icon" />
+                      {wordCount} từ
+                    </span>
+                    {deck.updatedAt && (
+                      <span className="fb-card-date">
+                        <ClockIcon className="date-icon" />
+                        {new Date(deck.updatedAt).toLocaleDateString('vi-VN')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Progress bar (visual flair) */}
+                {wordCount > 0 && (
+                  <div className="fb-card-progress-wrap">
+                    <div className="fb-card-progress-bar">
+                      <div
+                        className="fb-card-progress-fill"
+                        style={{
+                          width: `${Math.min(100, wordCount)}%`,
+                          background: getCoverGradient(deck.color),
+                        }}
+                      />
+                    </div>
+                    <div className="fb-card-progress-label">
+                      <span>Tiến độ</span>
+                      <span>{Math.min(100, wordCount)} từ</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <hr className="fb-card-divider" />
+
+                {/* Action Bar */}
+                <div className="fb-card-actions">
+                  <button
+                    className="fb-action-btn view"
+                    onClick={(e) => { e.stopPropagation(); onDeckClick && onDeckClick(deck._id) }}
+                    title="Xem bộ thẻ"
+                  >
+                    <EyeIcon className="action-icon" />
+                    <span>Xem</span>
+                  </button>
+                  <button
+                    className="fb-action-btn edit"
+                    onClick={(e) => { e.stopPropagation(); openDeckModal(deck) }}
                     title="Sửa bộ thẻ"
                   >
-                    <PencilSquareIcon className="icon" />
+                    <PencilSquareIcon className="action-icon" />
+                    <span>Chỉnh sửa</span>
                   </button>
-                  <button 
-                    className="deck-action-btn delete" 
-                    onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck); }} 
+                  <button
+                    className="fb-action-btn delete"
+                    onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck) }}
                     title="Xóa bộ thẻ"
                   >
-                    <TrashIcon className="icon" />
+                    <TrashIcon className="action-icon" />
+                    <span>Xóa</span>
                   </button>
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
 
+      {/* ===== Create/Edit Modal ===== */}
       {showDeckModal && (
         <div className="modal-overlay" onClick={closeDeckModal}>
           <div className="modal modal-deck" onClick={e => e.stopPropagation()}>
@@ -228,6 +301,7 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
         </div>
       )}
 
+      {/* ===== Delete Confirm Modal ===== */}
       {deleteDeckTarget && (
         <div className="modal-overlay" onClick={() => setDeleteDeckTarget(null)}>
           <div className="modal modal-confirm" onClick={e => e.stopPropagation()}>
@@ -237,7 +311,7 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
             </div>
             <div className="modal-body">
               <p>
-                Bạn có chắc muốn xóa bộ thẻ <strong>"{deleteDeckTarget.name}"</strong>?
+                Bạn có chắc muốn xóa bộ thẻ <strong>&quot;{deleteDeckTarget.name}&quot;</strong>?
               </p>
               <p className="text-muted" style={{ fontSize: '13px', marginTop: '4px' }}>
                 Các từ vựng trong bộ thẻ sẽ không bị xóa, chỉ nhóm bộ thẻ bị gỡ bỏ.

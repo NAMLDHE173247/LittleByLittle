@@ -23,6 +23,7 @@ export default function DeckMasteryRoute() {
   const [allWords, setAllWords] = useState<any[]>([]);
   const [loadingWords, setLoadingWords] = useState(true);
   const [activeMode, setActiveMode] = useState<string>('learn');
+  const [isQuizActive, setIsQuizActive] = useState(false);
 
   useEffect(() => {
     if (!deckId) return;
@@ -112,40 +113,49 @@ export default function DeckMasteryRoute() {
 
   return (
     <div className="deck-mastery-page" style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
-      <button 
-        onClick={() => router.push("/decks")} 
-        style={{ 
-          display: "inline-flex", 
-          alignItems: "center", 
-          gap: "8px", 
-          background: "none", 
-          border: "none", 
-          color: "var(--text-secondary)", 
-          cursor: "pointer",
-          marginBottom: "20px",
-          fontSize: "14px",
-          fontWeight: 500
-        }}
-      >
-        <ArrowLeftIcon style={{ width: "16px", height: "16px" }} /> Quay lại bộ thẻ
-      </button>
+      {!isQuizActive && (
+        <>
+          <button 
+            onClick={() => router.push("/decks")} 
+            style={{ 
+              display: "inline-flex", 
+              alignItems: "center", 
+              gap: "8px", 
+              background: "none", 
+              border: "none", 
+              color: "var(--text-secondary)", 
+              cursor: "pointer",
+              marginBottom: "20px",
+              fontSize: "14px",
+              fontWeight: 500
+            }}
+          >
+            <ArrowLeftIcon style={{ width: "16px", height: "16px" }} /> Quay lại bộ thẻ
+          </button>
 
-      <div style={{ marginBottom: "24px" }}>
-        {loading ? (
-          <div style={{ height: "32px", width: "200px", background: "var(--bg-card)", borderRadius: "4px", animation: "pulse 1.5s infinite" }} />
-        ) : (
-          <h1 style={{ fontSize: "24px", fontWeight: "bold", margin: 0, color: "var(--text-primary)" }}>
-            Độ thông thạo: <span style={{ color: deck?.color || "var(--primary-color)" }}>{deck?.name || "Bộ thẻ"}</span>
-          </h1>
-        )}
-        {deck?.description && (
-          <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: "15px" }}>{deck.description}</p>
-        )}
-      </div>
+          <div style={{ marginBottom: "24px" }}>
+            {loading ? (
+              <div style={{ height: "32px", width: "200px", background: "var(--bg-card)", borderRadius: "4px", animation: "pulse 1.5s infinite" }} />
+            ) : (
+              <h1 style={{ fontSize: "24px", fontWeight: "bold", margin: 0, color: "var(--text-primary)" }}>
+                Độ thông thạo: <span style={{ color: deck?.color || "var(--primary-color)" }}>{deck?.name || "Bộ thẻ"}</span>
+              </h1>
+            )}
+            {deck?.description && (
+              <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: "15px" }}>{deck.description}</p>
+            )}
+          </div>
+        </>
+      )}
 
       {!loadingWords && allWords.length > 0 && (
         <div className="deck-fc-wrapper" style={{ marginBottom: "40px" }}>
-          <FlashcardsPage vocabularies={allWords} submitProgress={submitProgress} onModeChange={setActiveMode} />
+          <FlashcardsPage 
+            vocabularies={allWords} 
+            submitProgress={submitProgress} 
+            onModeChange={setActiveMode} 
+            onQuizActiveChange={setIsQuizActive}
+          />
         </div>
       )}
 
