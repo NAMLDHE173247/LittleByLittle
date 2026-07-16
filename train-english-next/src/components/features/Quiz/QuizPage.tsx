@@ -9,12 +9,10 @@ import {
   CheckIcon,
   XMarkIcon,
   ArrowPathIcon,
-  RocketLaunchIcon,
   QuestionMarkCircleIcon,
   EyeIcon,
   LightBulbIcon,
   ArrowsRightLeftIcon,
-  ListBulletIcon,
   FunnelIcon,
   ChevronDownIcon,
   AdjustmentsHorizontalIcon,
@@ -25,12 +23,28 @@ import {
   CheckCircleIcon,
   DocumentTextIcon,
   ForwardIcon,
-  CommandLineIcon
+  CommandLineIcon,
+  LanguageIcon
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { checkAnswer } from '@/lib/utils/answerUtils'
 import { useGlobalData } from '@/components/providers/GlobalDataProvider'
 import TTSSettingsModal from '@/components/shared/TTSSettingsModal'
+import {
+  createSessionState,
+  getTier,
+  normalizeSource,
+  recordAnswer,
+  selectNextQuestion,
+  type CombineStrategy,
+  type PlannedQuestion,
+  type PlannerProgress,
+  type QuestionType,
+  type QuizSessionState,
+  type SourceOrder,
+  type SourceScope,
+  type TranslationDirection,
+} from './quizPlanner'
 
 // ===== TYPES =====
 interface DeckRef {
@@ -66,11 +80,8 @@ interface VocabularyItem {
   createdAt: string
 }
 
-type QuizMode = 'en2vi' | 'vi2en'
-type QuestionType = 'multiple' | 'fill' | 'listen'
-
 interface QuizSettings {
-  mode: QuizMode
+  mode: TranslationDirection
   questionTypes: QuestionType[]
   questionCount: number
   shuffle: boolean
@@ -81,6 +92,9 @@ interface QuizSettings {
   filterPOS: string
   filterTier: string
   sourceMode: string
+  sourceScope: SourceScope
+  sourceOrder: SourceOrder
+  combineStrategy: CombineStrategy
   filterStarredOnly?: boolean
   requireRetypeOnWrong: boolean
 }
@@ -88,19 +102,22 @@ interface QuizSettings {
 interface QuizQuestion {
   vocab: VocabularyItem
   type: QuestionType
+  direction: Exclude<TranslationDirection, 'mixed'>
   questionText: string
   correctAnswer: string
   options: string[] // for multiple/listen
   correctIdx: number
+  retryForWordId?: string
+  downgradedFrom?: QuestionType
 }
 
 interface QuizPageProps {
   vocabularies: VocabularyItem[]
   decks: DeckItem[]
-  masteryWords?: any[]
+  masteryWords?: PlannerProgress[]
   onExit: () => void
   onEditWord: (vocab: VocabularyItem) => void
-  speak: (word: string, options?: any) => void
+  speak: (word: string, options?: Record<string, unknown>) => void
   submitProgress?: (wordId: string, skill: string, isCorrect: boolean, isHinted?: boolean) => void
   onQuizActiveChange?: (isActive: boolean) => void
   stopSpeaking?: () => void
@@ -116,83 +133,87 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a
 }
 
-function buildQuestions(
-  words: VocabularyItem[],
-  settings: QuizSettings,
+const getVocabId = (vocab: Pick<VocabularyItem, '_id'> & { wordId?: string }): string => vocab._id || vocab.wordId || ''
+
+const isSkillDue = (skill: unknown, now: number): boolean => {
+  if (typeof skill !== 'object' || skill === null) return false
+  const typedSkill = skill as { points?: unknown; nextReview?: string }
+  const nextReview = typedSkill.nextReview
+  const points = Number(typedSkill.points ?? 0)
+  return points > 0 && Boolean(nextReview) && new Date(nextReview as string).getTime() <= now
+}
+
+function createQuizQuestion(
+  planned: PlannedQuestion<VocabularyItem>,
   allVocabularies: VocabularyItem[]
-): QuizQuestion[] {
-  const pool = settings.shuffle ? shuffleArray(words) : [...words]
-  const count = Math.min(settings.questionCount, pool.length)
-  const selected = pool.slice(0, count)
-  const types = settings.questionTypes.length > 0
-    ? settings.questionTypes
-    : ['multiple' as QuestionType]
+): QuizQuestion {
+  const { vocab, type, direction } = planned
+  const questionText = direction === 'en2vi'
+    ? vocab.word
+    : vocab.meanings.join(', ')
 
-  return selected.map((vocab, idx) => {
-    // Pick a random question type from enabled types
-    const type = types[idx % types.length]
+  const correctAnswer = direction === 'en2vi'
+    ? vocab.meanings.join(', ')
+    : vocab.word
 
-    const questionText = settings.mode === 'en2vi'
-      ? vocab.word
-      : vocab.meanings.join(', ')
+  const options: string[] = []
+  let correctIdx = 0
 
-    const correctAnswer = settings.mode === 'en2vi'
-      ? vocab.meanings.join(', ')
-      : vocab.word
+  if (type === 'multiple' || type === 'listen') {
+    const normalize = (str: string) => str.toLowerCase().trim()
+    const correctAnsNorm = normalize(correctAnswer)
 
-    // Build options for multiple/listen
-    let options: string[] = []
-    let correctIdx = 0
+    const validWrongs = allVocabularies.filter(w => {
+      const wId = getVocabId(w)
+      const vId = getVocabId(vocab)
+      if (wId === vId) return false
+      const wAns = direction === 'en2vi' ? w.meanings?.join(', ') : w.word
+      if (!wAns) return false
+      if (normalize(wAns) === correctAnsNorm) return false
+      return true
+    })
 
-    if (type === 'multiple' || type === 'listen') {
-      const normalize = (str: string) => str.toLowerCase().trim()
-      const correctAnsNorm = normalize(correctAnswer)
-      
-      // Filter out words that have the same answer text
-      const validWrongs = allVocabularies.filter(w => {
-        const wId = w._id || (w as any).wordId
-        const vId = vocab._id || (vocab as any).wordId
-        if (wId === vId) return false
-        const wAns = settings.mode === 'en2vi' ? w.meanings?.join(', ') : w.word
-        if (!wAns) return false
-        if (normalize(wAns) === correctAnsNorm) return false
-        return true
-      })
-      
-      // Dedupe wrong answers so we don't show the same wrong answer twice
-      const uniqueWrongsMap = new Map<string, string>()
-      validWrongs.forEach(w => {
-        const wAns = settings.mode === 'en2vi' ? w.meanings?.join(', ') : w.word
-        if (!wAns) return
-        const norm = normalize(wAns)
-        if (!uniqueWrongsMap.has(norm)) {
-          uniqueWrongsMap.set(norm, wAns)
-        }
-      })
-      let distinctWrongAnswers = Array.from(uniqueWrongsMap.values())
-      
-      // Fallback if dedupe is too aggressive
-      if (distinctWrongAnswers.length < 3) {
-        const vId = vocab._id || (vocab as any).wordId
-        const others = allVocabularies.filter(w => (w._id || (w as any).wordId) !== vId)
-        distinctWrongAnswers = others.map(w => settings.mode === 'en2vi' ? w.meanings?.join(', ') || '' : w.word).filter(Boolean)
+    const uniqueWrongsMap = new Map<string, string>()
+    validWrongs.forEach(w => {
+      const wAns = direction === 'en2vi' ? w.meanings?.join(', ') : w.word
+      if (!wAns) return
+      const norm = normalize(wAns)
+      if (!uniqueWrongsMap.has(norm)) {
+        uniqueWrongsMap.set(norm, wAns)
       }
+    })
+    let distinctWrongAnswers = Array.from(uniqueWrongsMap.values())
 
-      const actualWrongs = Math.min(distinctWrongAnswers.length, 3)
-      const picked = shuffleArray(distinctWrongAnswers).slice(0, actualWrongs)
-      
-      const totalOptions = actualWrongs + 1
-      correctIdx = Math.floor(Math.random() * totalOptions)
-      
-      let wi = 0
-      for (let i = 0; i < totalOptions; i++) {
-        if (i === correctIdx) options.push(correctAnswer)
-        else { options.push(picked[wi]); wi++ }
-      }
+    if (distinctWrongAnswers.length < 3) {
+      const vId = getVocabId(vocab)
+      const others = allVocabularies.filter(w => getVocabId(w) !== vId)
+      distinctWrongAnswers = others.map(w => direction === 'en2vi' ? w.meanings?.join(', ') || '' : w.word).filter(Boolean)
     }
 
-    return { vocab, type, questionText, correctAnswer, options, correctIdx }
-  })
+    const actualWrongs = Math.min(distinctWrongAnswers.length, 3)
+    const picked = shuffleArray(distinctWrongAnswers).slice(0, actualWrongs)
+
+    const totalOptions = actualWrongs + 1
+    correctIdx = Math.floor(Math.random() * totalOptions)
+
+    let wi = 0
+    for (let i = 0; i < totalOptions; i++) {
+      if (i === correctIdx) options.push(correctAnswer)
+      else { options.push(picked[wi]); wi++ }
+    }
+  }
+
+  return {
+    vocab,
+    type,
+    direction,
+    questionText,
+    correctAnswer,
+    options,
+    correctIdx,
+    retryForWordId: planned.retryForWordId,
+    downgradedFrom: planned.downgradedFrom,
+  }
 }
 
 // ===== DEFAULT SETTINGS =====
@@ -208,11 +229,14 @@ const defaultSettings: QuizSettings = {
   filterPOS: '',
   filterTier: 'all',
   sourceMode: 'random',
+  sourceScope: 'all',
+  sourceOrder: 'random',
+  combineStrategy: 'smart',
   requireRetypeOnWrong: false
 }
 
 // ===== COMPONENT =====
-export default function QuizPage({ vocabularies, decks, masteryWords, onExit, onEditWord, speak, stopSpeaking, submitProgress, onQuizActiveChange }: QuizPageProps) {
+export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord, speak, stopSpeaking, submitProgress, onQuizActiveChange }: QuizPageProps) {
   const { ttsAccent, ttsSettingsReady } = useGlobalData()
   const [settings, setSettings] = useState<QuizSettings>({ ...defaultSettings })
   const [activeSettings, setActiveSettings] = useState<QuizSettings | null>(null)
@@ -234,19 +258,23 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
   const [hintUsed, setHintUsed] = useState(false)
   const [showHintText, setShowHintText] = useState(false)
   const [showExampleTranslation, setShowExampleTranslation] = useState(false)
-  const [autoPlayAudio, setAutoPlayAudio] = useState(false)
-  const [settingsLoaded, setSettingsLoaded] = useState(false)
-
+  const [autoPlayAudio, setAutoPlayAudio] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('quizAutoPlayAudio') === 'true'
+  })
+  const settingsLoaded = true
   const fillInputRef = useRef<HTMLInputElement>(null)
   const autoNextTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const spokenQuestionIdx = useRef<number>(-1)
+  const plannerSessionRef = useRef<QuizSessionState<VocabularyItem> | null>(null)
 
   // Map progress to easy lookup
   const progressMap = useMemo(() => {
-    const map = new Map<string, any>()
+    const map = new Map<string, PlannerProgress>()
     if (masteryWords) {
       masteryWords.forEach(mw => {
-        map.set(mw.wordId || mw._id, mw)
+        const id = mw.wordId || mw._id
+        if (id) map.set(id, mw)
       })
     }
     return map
@@ -262,45 +290,48 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
       if (settings.filterPOS && v.partOfSpeech !== settings.filterPOS) return false
 
       if (settings.filterTier && settings.filterTier !== 'all') {
-        const vId = v._id || (v as any).wordId
+        const vId = getVocabId(v)
         const mw = progressMap.get(vId)
-        const overall = mw?.overall || 0
-        let tier = "not_started"
-        if (overall >= 80) tier = "mastered"
-        else if (overall >= 40) tier = "familiar"
-        else if (overall > 0) tier = "learning"
+        const tier = getTier(mw)
         if (tier !== settings.filterTier) return false
       }
       return true
     })
 
-    // sourceMode: newest, oldest, random, lowest_score, overdue
-    if (settings.sourceMode === 'lowest_score') {
+    const source = normalizeSource(settings.sourceMode, Boolean(settings.filterDeck))
+    if (source.sourceScope === 'weak') {
+      result = result.filter(v => {
+        const mw = progressMap.get(getVocabId(v))
+        const tier = getTier(mw)
+        return tier === 'not_started' || tier === 'learning' || Number(mw?.overall ?? 0) < 50
+      })
+    } else if (source.sourceScope === 'due') {
+      const now = new Date().getTime()
+      result = result.filter(v => {
+        const vId = getVocabId(v)
+        const mw = progressMap.get(vId)
+        if (!mw) return false
+        return Boolean(mw.isDecaying) ||
+          isSkillDue(mw.skills?.recall, now) ||
+          isSkillDue(mw.skills?.listening, now) ||
+          isSkillDue(mw.skills?.writing, now) ||
+          isSkillDue(mw.skills?.pronunciation, now)
+      })
+    }
+
+    if (source.sourceOrder === 'lowest_score' || source.sourceOrder === 'adaptive') {
       result.sort((a, b) => {
         const scoreA = progressMap.get(a._id)?.overall || 0
         const scoreB = progressMap.get(b._id)?.overall || 0
         if (scoreA !== scoreB) return scoreA - scoreB
-        return Math.random() - 0.5
+        return 0
       })
-    } else if (settings.sourceMode === 'newest') {
+    } else if (source.sourceOrder === 'newest') {
       result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-    } else if (settings.sourceMode === 'oldest') {
+    } else if (source.sourceOrder === 'oldest') {
       result.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
-    } else if (settings.sourceMode === 'overdue') {
-      const now = new Date().getTime()
-      result = result.filter(v => {
-        const vId = v._id || (v as any).wordId
-        const mw = progressMap.get(vId)
-        if (!mw) return false
-        const isDecaying = (mw.skills?.recall?.nextReview && new Date(mw.skills.recall.nextReview).getTime() <= now && mw.skills.recall.points > 0) ||
-          (mw.skills?.listening?.nextReview && new Date(mw.skills.listening.nextReview).getTime() <= now && mw.skills.listening.points > 0) ||
-          (mw.skills?.writing?.nextReview && new Date(mw.skills.writing.nextReview).getTime() <= now && mw.skills.writing.points > 0) ||
-          (mw.skills?.pronunciation?.nextReview && new Date(mw.skills.pronunciation.nextReview).getTime() <= now && mw.skills.pronunciation.points > 0)
-        return isDecaying
-      })
-      result.sort(() => Math.random() - 0.5)
     } else {
-      result.sort(() => Math.random() - 0.5)
+      result.sort((a, b) => a.word.localeCompare(b.word))
     }
 
     return result
@@ -324,20 +355,21 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     onQuizActiveChange?.(started)
   }, [started, onQuizActiveChange])
 
-  // Load autoPlayAudio settings
-  useEffect(() => {
-    const saved = localStorage.getItem('quizAutoPlayAudio')
-    if (saved !== null) {
-      setAutoPlayAudio(saved === 'true')
-    }
-    setSettingsLoaded(true)
+  const updateSetting = useCallback((key: keyof QuizSettings, value: unknown) => {
+    setSettings(prev => {
+      if (key === 'sourceMode') {
+        const source = normalizeSource(String(value), Boolean(prev.filterDeck))
+        return { ...prev, sourceMode: String(value), ...source }
+      }
+      if (key === 'filterDeck') {
+        const source = normalizeSource(prev.sourceMode, Boolean(value))
+        return { ...prev, filterDeck: String(value), ...source }
+      }
+      return { ...prev, [key]: value }
+    })
   }, [])
 
-  const updateSetting = useCallback((key: keyof QuizSettings, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }))
-  }, [])
-
-  const toggleAutoPlayAudio = (e: React.MouseEvent) => {
+  const toggleAutoPlayAudio = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
     setAutoPlayAudio(prev => {
       const next = !prev
@@ -370,56 +402,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
   const supportsRetryOnWrong = (types: string[]) => types.includes('fill')
 
-  const startQuiz = useCallback(() => {
-    stopSpeaking?.()
-    // Allow starting with at least 1 word for multiple/listen too
-    if (filteredWords.length < 1) return
-
-    const qs = buildQuestions(filteredWords, settings, vocabularies)
-    setQuestions(qs)
-    
-    const activeSet = { ...settings }
-    if (!supportsRetryOnWrong(activeSet.questionTypes)) {
-      activeSet.requireRetypeOnWrong = false
-    }
-    setActiveSettings(activeSet)
-    setCurrentIdx(0)
-    setSelected(null)
-    setAnswered(false)
-    setCorrectCount(0)
-    setTotalAnswered(0)
-    setFillInput('')
-    setFillCorrect(null)
-    setWrongAnswers([])
-    setShowReview(false)
-    setHintUsed(false)
-    setShowHintText(false)
-    setShowExampleTranslation(false)
-    spokenQuestionIdx.current = -1
-    setStarted(true)
-  }, [filteredWords, settings, vocabularies])
-
-  const handleRestart = () => {
-    stopSpeaking?.()
-    setStarted(false)
-    setCurrentIdx(0)
-    setSelected(null)
-    setAnswered(false)
-    setCorrectCount(0)
-    setTotalAnswered(0)
-    setFillInput('')
-    setFillCorrect(null)
-    setWrongAnswers([])
-    setShowReview(false)
-    setHintUsed(false)
-    setShowHintText(false)
-    setShowExampleTranslation(false)
-    spokenQuestionIdx.current = -1
-  }
-
-  const goNext = useCallback(() => {
-    if (autoNextTimer.current) clearTimeout(autoNextTimer.current)
-    setCurrentIdx(prev => prev + 1)
+  const resetQuestionUi = useCallback(() => {
     setSelected(null)
     setAnswered(false)
     setFillInput('')
@@ -428,15 +411,98 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setHintUsed(false)
     setShowHintText(false)
     setShowExampleTranslation(false)
-  }, [stopSpeaking])
+  }, [])
+
+  const syncPlannerSession = useCallback((session: QuizSessionState<VocabularyItem>) => {
+    plannerSessionRef.current = session
+  }, [])
+
+  const appendNextQuestion = useCallback((session: QuizSessionState<VocabularyItem>) => {
+    const result = selectNextQuestion(session)
+    syncPlannerSession(result.session)
+    if (!result.question) return false
+    setQuestions(prev => [...prev, createQuizQuestion(result.question!, vocabularies)])
+    return true
+  }, [syncPlannerSession, vocabularies])
+
+  const startQuiz = useCallback(() => {
+    stopSpeaking?.()
+    // Allow starting with at least 1 word for multiple/listen too
+    if (filteredWords.length < 1) return
+
+    const source = normalizeSource(settings.sourceMode, Boolean(settings.filterDeck))
+    const activeSet = {
+      ...settings,
+      ...source,
+      questionCount: settings.questionCount > 50 ? filteredWords.length : settings.questionCount,
+      combineStrategy: settings.questionTypes.length > 1 ? settings.combineStrategy : 'smart' as CombineStrategy,
+    }
+    if (!supportsRetryOnWrong(activeSet.questionTypes)) {
+      activeSet.requireRetypeOnWrong = false
+    }
+    const session = createSessionState(filteredWords, masteryWords || [], {
+      direction: activeSet.mode,
+      questionTypes: activeSet.questionTypes,
+      questionCount: activeSet.questionCount,
+      shuffle: activeSet.shuffle,
+      sourceScope: activeSet.sourceScope,
+      sourceOrder: activeSet.sourceOrder,
+      combineStrategy: activeSet.combineStrategy,
+    })
+    const first = selectNextQuestion(session)
+    if (!first.question) return
+
+    syncPlannerSession(first.session)
+    setQuestions([createQuizQuestion(first.question, vocabularies)])
+    setActiveSettings(activeSet)
+    setCurrentIdx(0)
+    resetQuestionUi()
+    setCorrectCount(0)
+    setTotalAnswered(0)
+    setWrongAnswers([])
+    setShowReview(false)
+    spokenQuestionIdx.current = -1
+    setStarted(true)
+  }, [filteredWords, masteryWords, resetQuestionUi, settings, stopSpeaking, syncPlannerSession, vocabularies])
+
+  const handleRestart = () => {
+    stopSpeaking?.()
+    setStarted(false)
+    setQuestions([])
+    plannerSessionRef.current = null
+    setCurrentIdx(0)
+    resetQuestionUi()
+    setCorrectCount(0)
+    setTotalAnswered(0)
+    setWrongAnswers([])
+    setShowReview(false)
+    spokenQuestionIdx.current = -1
+  }
+
+  const goNext = useCallback(() => {
+    if (autoNextTimer.current) clearTimeout(autoNextTimer.current)
+    const session = plannerSessionRef.current
+    if (session && session.answeredCount < session.settings.questionCount && currentIdx + 1 >= questions.length) {
+      appendNextQuestion(session)
+    }
+    setCurrentIdx(prev => prev + 1)
+    resetQuestionUi()
+  }, [appendNextQuestion, currentIdx, questions.length, resetQuestionUi])
 
   const handleNext = goNext
 
   const scheduleAutoNext = useCallback(() => {
-    if (settings.autoNext) {
+    if ((activeSettings || settings).autoNext) {
       autoNextTimer.current = setTimeout(goNext, 1200)
     }
-  }, [settings.autoNext, goNext])
+  }, [activeSettings, settings, goNext])
+
+  const recordQuestionResult = useCallback((q: QuizQuestion, isCorrect: boolean, hinted = false) => {
+    const session = plannerSessionRef.current
+    if (!session) return
+    const nextSession = recordAnswer(session, q, isCorrect, hinted)
+    syncPlannerSession(nextSession)
+  }, [syncPlannerSession])
 
   // ---- Multiple Choice Handler ----
   const handleSelect = (idx: number) => {
@@ -448,23 +514,22 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     
     const isCorrect = idx === q.correctIdx
     const skill = q.type === 'listen' ? 'listening' : 'recall'
+    recordQuestionResult(q, isCorrect, hintUsed)
 
     if (submitProgress) {
-      const vId = q.vocab._id || (q.vocab as any).wordId
+      const vId = getVocabId(q.vocab)
       submitProgress(vId, skill, isCorrect, hintUsed)
     }
 
     if (isCorrect) {
       if (hintUsed) {
         toast.info("Chính xác! (Câu này không được cộng điểm vì đã dùng gợi ý 💡)")
-        setQuestions(prev => [...prev, q])
       } else {
         setCorrectCount(prev => prev + 1)
       }
       scheduleAutoNext()
     } else {
       setWrongAnswers(prev => [...prev, currentIdx])
-      setQuestions(prev => [...prev, q])
     }
   }
 
@@ -478,11 +543,11 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
     const q = questions[currentIdx]
     const skill = q.type === 'listen' ? 'listening' : q.type === 'fill' ? 'writing' : 'recall'
+    recordQuestionResult(q, false, false)
     if (submitProgress) {
-      const vId = q.vocab._id || (q.vocab as any).wordId
+      const vId = getVocabId(q.vocab)
       submitProgress(vId, skill, false, false)
     }
-    setQuestions(prev => [...prev, q])
   }
 
   // ---- Fill-in-blank Handler ----
@@ -491,7 +556,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     if (!fillInput.trim()) return
 
     const q = questions[currentIdx]
-    const activeMode = activeSettings?.mode || settings.mode
+    const activeMode = q.direction
     
     let validAnswers = [q.correctAnswer]
     if (activeMode === 'en2vi') validAnswers = [...validAnswers, ...q.vocab.meanings]
@@ -516,8 +581,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     setAnswered(true)
     setFillCorrect(isCorrect)
 
-    const vId = q.vocab._id || (q.vocab as any).wordId
+    const vId = getVocabId(q.vocab)
     const skill = q.type === 'listen' ? 'listening' : q.type === 'fill' ? 'writing' : 'recall'
+    recordQuestionResult(q, isCorrect, hintUsed)
 
     if (isCorrect) {
       setCorrectCount(prev => prev + 1)
@@ -579,12 +645,11 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
           <h2 className="quiz-review-title">📝 Các từ cần ôn tập ({wrongQs.length})</h2>
           <div className="quiz-review-list">
             {wrongQs.map((q, i) => {
-              const vId = q.vocab._id || (q.vocab as any).wordId
               return (
                 <div key={i} className="quiz-review-item">
                   <div className="quiz-question-prompt">
                     <h3>{q.questionText}</h3>
-                    {(activeSettings?.mode || settings.mode) === 'en2vi' && q.vocab.pronunciation && (
+                    {q.direction === 'en2vi' && q.vocab.pronunciation && (
                       <p className="quiz-pronunciation">{q.vocab.pronunciation}</p>
                     )}
                   </div>
@@ -614,7 +679,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                 onClick={() => {
                   const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
                   const wrongVocabs = wrongQs.map(q => q.vocab)
-                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [v._id || (v as any).wordId, v])).values())
+                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
                   sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
                   window.location.href = '/writing'
                 }}
@@ -673,7 +738,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                 onClick={() => {
                   const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
                   const wrongVocabs = wrongQs.map(q => q.vocab)
-                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [v._id || (v as any).wordId, v])).values())
+                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
                   sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
                   window.location.href = '/writing'
                 }}
@@ -692,37 +757,6 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
     const availableCount = filteredWords.length
     const needsMultiple = settings.questionTypes.some(t => t !== 'fill')
     const canStart = needsMultiple ? availableCount >= 4 : availableCount >= 1
-
-    const getFilterText = () => {
-      const filters: string[] = []
-      if (settings.filterTier && settings.filterTier !== 'all') {
-        const tierMap = { not_started: 'Chưa học', learning: 'Đang học', familiar: 'Đã quen', mastered: 'Thành thạo' }
-        filters.push(tierMap[settings.filterTier as keyof typeof tierMap])
-      }
-      if (settings.filterDeck) {
-        const deck = decks.find(d => d._id === settings.filterDeck)
-        if (deck) filters.push(deck.name)
-      }
-      if (settings.filterLevel) filters.push(settings.filterLevel)
-      if (settings.filterTopic) filters.push(settings.filterTopic)
-      if (settings.filterPOS) filters.push(settings.filterPOS)
-      if (settings.filterStarredOnly) filters.push('Đã đánh dấu')
-
-      if (filters.length === 0) return 'Tất cả từ vựng'
-      if (filters.length === 1) return filters[0]
-      return `${filters[0]} · ${filters[1]}` + (filters.length > 2 ? ` (+${filters.length - 2})` : '')
-    }
-
-    const getSourceModeText = () => {
-      const map = {
-        random: 'Ngẫu nhiên',
-        lowest_score: 'Điểm thấp nhất',
-        overdue: 'Đến hạn ôn tập',
-        newest: 'Mới nhất',
-        oldest: 'Cũ nhất'
-      }
-      return map[settings.sourceMode as keyof typeof map] || 'Ngẫu nhiên'
-    }
 
     return (
       <div className="quiz-start">
@@ -744,7 +778,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                 </div>
                 <div className="quiz-info-text">
                   <span className="quiz-info-num">
-                    {Math.min(settings.questionCount, availableCount)}
+                    {settings.questionCount > 50 ? availableCount : settings.questionCount}
                   </span>
                   <span className="quiz-info-label">câu hỏi</span>
                 </div>
@@ -859,12 +893,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
               <div style={{ marginBottom: '28px' }}>
                 <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px' }}>Loại câu hỏi</span>
                 <div className="flex gap-3">
-                  {[
+                  {([
                     { id: 'multiple', label: 'Trắc nghiệm', icon: null },
                     { id: 'fill', label: 'Điền từ', icon: DocumentTextIcon },
                     { id: 'listen', label: 'Nghe', icon: SpeakerWaveIcon }
-                  ].map(type => {
-                    const isActive = settings.questionTypes.includes(type.id as any)
+                  ] satisfies Array<{ id: QuestionType; label: string; icon: typeof DocumentTextIcon | typeof SpeakerWaveIcon | null }>).map(type => {
+                    const isActive = settings.questionTypes.includes(type.id)
                     const Icon = type.icon;
                     return (
                       <button
@@ -876,7 +910,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                         onClick={() => {
                           const newTypes = isActive 
                             ? settings.questionTypes.filter(t => t !== type.id)
-                            : [...settings.questionTypes, type.id as any]
+                            : [...settings.questionTypes, type.id]
                           if (newTypes.length > 0) updateSetting('questionTypes', newTypes)
                         }}
                       >
@@ -889,14 +923,42 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                 </div>
               </div>
 
+              {settings.questionTypes.length > 1 && (
+                <div style={{ marginBottom: '28px' }}>
+                  <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px' }}>Cách kết hợp</span>
+                  <div className="flex p-1 mt-1 quiz-segmented-container">
+                    <button
+                      className={`flex-1 text-[15px] font-medium quiz-segmented-item ${
+                        settings.combineStrategy === 'smart' ? 'quiz-segmented-active' : ''
+                      }`}
+                      style={{ padding: '12px 0', borderRadius: '6px' }}
+                      onClick={() => updateSetting('combineStrategy', 'smart')}
+                    >
+                      Trộn thông minh
+                    </button>
+                    <button
+                      className={`flex-1 text-[15px] font-medium quiz-segmented-item ${
+                        settings.combineStrategy === 'round_robin' ? 'quiz-segmented-active' : ''
+                      }`}
+                      style={{ padding: '12px 0', borderRadius: '6px' }}
+                      onClick={() => updateSetting('combineStrategy', 'round_robin')}
+                    >
+                      Xen kẽ đều
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div style={{ marginBottom: '32px' }}>
                 <div className="flex justify-between items-end mb-2" style={{ marginBottom: '12px' }}>
                   <span className="quiz-config-label">Số câu hỏi</span>
-                  <span className="text-[12px] text-gray-500">{Math.min(settings.questionCount, availableCount)} / {availableCount} từ khả dụng</span>
+                  <span className="text-[12px] text-gray-500">
+                    {settings.questionCount > 50 ? availableCount : settings.questionCount} câu · {availableCount} từ khả dụng
+                  </span>
                 </div>
                 <div className="flex p-1 mt-1 quiz-segmented-container">
                   {[10, 20, 30, 50, 999].map(num => {
-                    const isDisabled = num !== 999 && availableCount < num && availableCount > 0
+                    const isDisabled = availableCount < 1
                     const isActive = settings.questionCount === num || (num === 999 && settings.questionCount > 50)
                     return (
                       <button
@@ -965,7 +1027,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                   </div>
                   <button 
                     className={`ui-switch ${autoPlayAudio ? 'active' : ''}`}
-                    onClick={(e) => toggleAutoPlayAudio(e as any)}
+                    onClick={toggleAutoPlayAudio}
                     role="switch"
                     aria-checked={autoPlayAudio}
                   >
@@ -1050,6 +1112,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                 <button className="btn-primary" onClick={() => {
                   setAnswered(true)
                   setSelected(0)
+                  recordQuestionResult(q, true, false)
                   setCorrectCount(c => c + 1)
                   setTotalAnswered(t => t + 1)
                   // No submitProgress here to prevent inflating mastery
@@ -1103,7 +1166,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             ref={fillInputRef}
             type="text"
             className={`quiz-fill-input ${fillCorrect === true ? 'correct' : fillCorrect === false ? 'wrong' : ''}`}
-            placeholder={(activeSettings?.mode || settings.mode) === 'en2vi' ? 'Nhập nghĩa tiếng Việt...' : 'Nhập từ tiếng Anh...'}
+            placeholder={q.direction === 'en2vi' ? 'Nhập nghĩa tiếng Việt...' : 'Nhập từ tiếng Anh...'}
             value={fillInput}
             onChange={e => {
               setFillInput(e.target.value)
@@ -1176,6 +1239,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
                   <button className="btn-primary" onClick={() => {
                     setAnswered(true)
                     setSelected(0)
+                    recordQuestionResult(q, true, false)
                     setCorrectCount(c => c + 1)
                     setTotalAnswered(t => t + 1)
                     // No submitProgress here to prevent inflating mastery
@@ -1247,7 +1311,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             )}
             <p className="quiz-feedback-text">
               {isCorrect ? '✓ Chính xác!' : <>Đáp án đúng là: <strong>
-                {settings.mode === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}
+                {q.direction === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}
               </strong></>}
             </p>
           </div>
@@ -1440,7 +1504,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
               <div className="quiz-filter-grid">
                 <div className="quiz-filter-item">
                   <label>Nguồn (Chế độ)</label>
-                  <select value={settings.sourceMode} onChange={e => setSettings(s => ({ ...s, sourceMode: e.target.value }))}>
+                  <select value={settings.sourceMode} onChange={e => updateSetting('sourceMode', e.target.value)}>
                     <option value="random">Ngẫu nhiên (Mặc định)</option>
                     <option value="lowest_score">Từ điểm thấp nhất</option>
                     <option value="overdue">Đến hạn ôn tập (Quên lãng)</option>
@@ -1686,12 +1750,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '4px' }}>
               <LightBulbIcon className="icon" style={{ width: 18, height: 18 }} /> Gợi ý
             </div>
-            {(activeSettings?.mode || settings.mode) === 'en2vi' 
+            {q.direction === 'en2vi'
               ? `Nghĩa của từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...` 
               : `Từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...`}
             {q.vocab.examples?.[0] && (
               <div style={{ marginTop: '4px', fontStyle: 'italic', opacity: 0.9 }}>
-                Ví dụ: "{(activeSettings?.mode || settings.mode) === 'en2vi' ? q.vocab.examples[0].en : q.vocab.examples[0].vi}"
+                {`Ví dụ: "${q.direction === 'en2vi' ? q.vocab.examples[0].en : q.vocab.examples[0].vi}"`}
               </div>
             )}
           </div>
@@ -1706,9 +1770,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onExit, on
 
       {/* Bottom Stats */}
       <div className="quiz-bottom-stats">
-        <span>Đã hoàn thành: {correctCount} / {questions.length}</span>
+        <span>Đã hoàn thành: {correctCount} / {activeSettings?.questionCount || questions.length}</span>
         <span>•</span>
-        <span>Câu hỏi: {currentIdx + 1} / {questions.length}</span>
+        <span>Câu hỏi: {Math.min(currentIdx + 1, activeSettings?.questionCount || questions.length)} / {activeSettings?.questionCount || questions.length}</span>
       </div>
 
       {/* Settings Modal */}
