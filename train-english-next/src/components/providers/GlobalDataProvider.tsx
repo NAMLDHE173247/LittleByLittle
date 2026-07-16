@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/AuthContext';
 import type { DeckItem, VocabularyItem, FormData, ProgressData } from '@/types';
 
@@ -52,6 +52,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterLevel, setFilterLevel] = useState('');
   const [filterTopic, setFilterTopic] = useState('');
@@ -106,6 +107,8 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
   
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const vocabularyAbortRef = useRef<AbortController | null>(null);
+  const vocabularyRequestIdRef = useRef(0);
 
   const [quickDeckVocab, setQuickDeckVocab] = useState<VocabularyItem | null>(null);
   const [quickDeckIds, setQuickDeckIds] = useState<string[]>([]);
@@ -175,26 +178,46 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   const fetchVocabularies = async () => {
+    if (searchQuery.trim() !== debouncedSearchQuery) return;
+
+    const requestId = vocabularyRequestIdRef.current + 1;
+    vocabularyRequestIdRef.current = requestId;
+    vocabularyAbortRef.current?.abort();
+    const controller = new AbortController();
+    vocabularyAbortRef.current = controller;
+
     try {
       setLoading(true);
       const params = new URLSearchParams({
-        page: String(currentPage), limit: String(itemsPerPage), search: searchQuery,
+        page: String(currentPage), limit: String(itemsPerPage), search: debouncedSearchQuery,
         type: filterCategory, level: filterLevel, topic: filterTopic, pos: filterPartOfSpeech,
         deck: filterDeck, sortBy: sortField, sortDir: sortDir
       });
-      const res = await fetch(`${API_URL}?${params}`, { headers: authHeaders() });
+      const res = await fetch(`${API_URL}?${params}`, { headers: authHeaders(), signal: controller.signal });
       const json = await res.json();
+      if (requestId !== vocabularyRequestIdRef.current) return;
+
       if (json.success) {
+        const nextTotalPages = json.pagination?.totalPages || 1;
+        if (currentPage > nextTotalPages && nextTotalPages > 0) {
+          setCurrentPage(nextTotalPages);
+          return;
+        }
         setVocabularies(json.data);
-        setTotalPagesState(json.pagination?.totalPages || 1);
+        setTotalPagesState(nextTotalPages);
         setTotalFiltered(json.pagination?.total || 0);
+        setError('');
       } else {
         setError('Failed to fetch data');
       }
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (requestId !== vocabularyRequestIdRef.current) return;
       setError('Cannot connect to server');
     } finally {
-      setLoading(false);
+      if (requestId === vocabularyRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -461,8 +484,15 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 400);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  useEffect(() => {
     fetchVocabularies();
-  }, [currentPage, searchQuery, filterCategory, filterLevel, filterTopic, filterPartOfSpeech, filterDeck, sortField, sortDir]);
+  }, [currentPage, debouncedSearchQuery, filterCategory, filterLevel, filterTopic, filterPartOfSpeech, filterDeck, sortField, sortDir]);
 
   // Modals Save Action
   const handleSave = async (e: React.FormEvent) => {

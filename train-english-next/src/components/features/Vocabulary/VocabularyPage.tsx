@@ -71,7 +71,15 @@ export default function VocabularyPage({
   }, [exportMenuOpen]);
 
   const fetchAllVocabs = async (): Promise<any[] | null> => {
-    const res = await fetch(`/api/vocabulary?limit=10000`, { headers: authHeaders() });
+    const params = new URLSearchParams({
+      search: searchQuery,
+      type: filterCategory,
+      level: filterLevel,
+      topic: filterTopic,
+      pos: filterPartOfSpeech,
+      deck: filterDeck,
+    });
+    const res = await fetch(`/api/vocabulary/export?${params}`, { headers: authHeaders() });
     const json = await res.json();
     if (!json.success || !json.data) {
       alert('Không thể tải dữ liệu từ vựng!');

@@ -1,8 +1,67 @@
 import { Vocabulary, Deck } from "../db/models";
 import dbConnect from "../db/connection";
-import mongoose from "mongoose";
+import mongoose, { SortOrder } from "mongoose";
+
+type VocabularyQueryArgs = Partial<Record<"page" | "limit" | "search" | "type" | "level" | "topic" | "pos" | "deck" | "sortBy" | "sortDir", string>>;
 
 export class VocabularyService {
+  private static readonly MAX_PAGE_SIZE = 100;
+  private static readonly DEFAULT_PAGE_SIZE = 10;
+  private static readonly MAX_SEARCH_LENGTH = 80;
+  private static readonly LIST_FIELDS = "word type pronunciation meanings partOfSpeech examples topic level synonyms antonyms note imageUrl audioUrl deckIds createdAt updatedAt";
+  private static readonly EXPORT_FIELDS = "word type pronunciation meanings partOfSpeech examples topic level synonyms antonyms note imageUrl audioUrl";
+  private static readonly SORT_FIELDS = new Set(["word", "type", "level", "topic", "partOfSpeech", "createdAt", "updatedAt"]);
+
+  private static escapeRegex(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  private static normalizePage(value: unknown) {
+    const page = Number(value);
+    return Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+  }
+
+  private static normalizeLimit(value: unknown) {
+    const limit = Number(value);
+    if (!Number.isFinite(limit)) return this.DEFAULT_PAGE_SIZE;
+    return Math.min(this.MAX_PAGE_SIZE, Math.max(1, Math.floor(limit)));
+  }
+
+  private static buildQuery(queryArgs: VocabularyQueryArgs) {
+    const {
+      search = "",
+      type = "",
+      level = "",
+      topic = "",
+      pos = "",
+      deck = "",
+    } = queryArgs;
+
+    const query: Record<string, unknown> = {};
+    const normalizedSearch = String(search || "").trim().slice(0, this.MAX_SEARCH_LENGTH);
+
+    if (normalizedSearch) {
+      const escapedSearch = this.escapeRegex(normalizedSearch);
+      query.$or = [
+        { word: { $regex: escapedSearch, $options: "i" } },
+        { meanings: { $regex: escapedSearch, $options: "i" } },
+      ];
+    }
+    if (type) query.type = type;
+    if (level) query.level = level;
+    if (topic) query.topic = topic;
+    if (pos) query.partOfSpeech = pos;
+    if (deck) query.deckIds = deck;
+
+    return query;
+  }
+
+  private static buildSort(sortBy = "word", sortDir = "asc"): Record<string, SortOrder> {
+    const field = this.SORT_FIELDS.has(sortBy) ? sortBy : "word";
+    const direction: SortOrder = sortDir === "desc" ? -1 : 1;
+    return { [field]: direction, _id: direction };
+  }
+
   static async getMetadata() {
     await dbConnect();
     const [totalWords, totalPhrases, uniqueTopics, uniqueLevels, uniquePartsOfSpeech] = await Promise.all([
@@ -24,36 +83,28 @@ export class VocabularyService {
     };
   }
 
-  static async getPaginated(queryArgs: any) {
+  static async getPaginated(queryArgs: VocabularyQueryArgs) {
     await dbConnect();
     const {
-      page = "1", limit = "10", search = "", type = "",
-      level = "", topic = "", pos = "", deck = "",
+      page = "1", limit = "10",
       sortBy = "word", sortDir = "asc",
     } = queryArgs;
 
-    const query: any = {};
-    if (search) {
-      query.$or = [
-        { word: { $regex: search, $options: "i" } },
-        { meanings: { $regex: search, $options: "i" } },
-      ];
-    }
-    if (type) query.type = type;
-    if (level) query.level = level;
-    if (topic) query.topic = topic;
-    if (pos) query.partOfSpeech = pos;
-    if (deck) query.deckIds = deck;
-
-    const sortOptions: any = {};
-    if (sortBy) sortOptions[sortBy] = sortDir === "desc" ? -1 : 1;
-
-    const limitNum = parseInt(limit, 10);
-    const pageNum = parseInt(page, 10);
+    const query = this.buildQuery(queryArgs);
+    const sortOptions = this.buildSort(sortBy, sortDir);
+    const limitNum = this.normalizeLimit(limit);
+    const pageNum = this.normalizePage(page);
     const skip = (pageNum - 1) * limitNum;
 
-    const vocabularies = await Vocabulary.find(query).sort(sortOptions).skip(skip).limit(limitNum);
-    const total = await Vocabulary.countDocuments(query);
+    const [vocabularies, total] = await Promise.all([
+      Vocabulary.find(query)
+        .select(this.LIST_FIELDS)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Vocabulary.countDocuments(query),
+    ]);
 
     return {
       data: vocabularies,
@@ -64,6 +115,17 @@ export class VocabularyService {
         totalPages: Math.ceil(total / limitNum),
       },
     };
+  }
+
+  static async getExportData(queryArgs: VocabularyQueryArgs = {}) {
+    await dbConnect();
+    const query = this.buildQuery(queryArgs);
+    const sortOptions = this.buildSort("word", "asc");
+
+    return Vocabulary.find(query)
+      .select(this.EXPORT_FIELDS)
+      .sort(sortOptions)
+      .lean();
   }
 
   static async create(data: any) {

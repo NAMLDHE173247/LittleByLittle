@@ -1,46 +1,113 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+
+import React, { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/AuthContext";
 import { useGlobalData } from "@/components/providers/GlobalDataProvider";
-import { 
-  ChevronLeftIcon, 
-  ChevronRightIcon, 
-  MagnifyingGlassIcon, 
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ExclamationTriangleIcon,
-  SpeakerWaveIcon
+  MagnifyingGlassIcon,
+  SpeakerWaveIcon,
 } from "@heroicons/react/24/outline";
-import { toast } from "sonner";
+
+type Tier = "not_started" | "learning" | "familiar" | "mastered";
+type SkillKey = "recall" | "listening" | "writing" | "pronunciation";
+
+interface ProgressWordItem {
+  wordId: string;
+  word: string;
+  pronunciation?: string;
+  meanings?: string[];
+  overall: number | string | null;
+  tier: Tier | string;
+  skills?: Partial<Record<SkillKey, number | string | null>>;
+}
+
+interface TierSummary {
+  mastered: number;
+  familiar: number;
+  learning: number;
+  not_started: number;
+  total: number;
+}
+
+interface Pagination {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  limit: number;
+}
+
+interface DeckInfo {
+  name?: string;
+  description?: string;
+  color?: string;
+  wordCount?: number;
+}
 
 interface DeckMasteryViewProps {
   deckId: string;
+  deck?: DeckInfo | null;
 }
 
 const DEBOUNCE_DELAY = 400;
+const PAGE_LIMIT = 20;
 
-export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
+const TIER_CONFIG: Record<Tier | "unknown", { label: string; color: string }> = {
+  not_started: { label: "Chưa học", color: "#94a3b8" },
+  learning: { label: "Đang học", color: "#eab308" },
+  familiar: { label: "Đã quen", color: "#3b82f6" },
+  mastered: { label: "Thành thạo", color: "#22c55e" },
+  unknown: { label: "Chưa xác định", color: "#f97316" },
+};
+
+const SUMMARY_ORDER: Array<{ key: Tier; shortLabel: string }> = [
+  { key: "mastered", shortLabel: "Thành thạo" },
+  { key: "familiar", shortLabel: "Đã quen" },
+  { key: "learning", shortLabel: "Đang học" },
+  { key: "not_started", shortLabel: "Chưa học" },
+];
+
+const RECALL_COLOR = "#3b82f6";
+
+function clampScore(value: number | string | null | undefined) {
+  const score = Math.round(Number(value ?? 0));
+  if (!Number.isFinite(score)) return 0;
+  return Math.min(100, Math.max(0, score));
+}
+
+function getTierConfig(tier: string) {
+  return TIER_CONFIG[tier as Tier] ?? TIER_CONFIG.unknown;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Đã có lỗi xảy ra.";
+}
+
+export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) {
   const { authHeaders } = useAuth();
   const { speak } = useGlobalData();
-  const router = useRouter();
-  
-  const [data, setData] = useState<any[]>([]);
+
+  const [data, setData] = useState<ProgressWordItem[]>([]);
+  const [tierSummary, setTierSummary] = useState<TierSummary | null>(null);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    totalPages: 1,
+    totalItems: 0,
+    limit: PAGE_LIMIT,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const limit = 20;
 
-  // Selected words state (Record of wordId -> VocabItem)
-  const [selectedWordsById, setSelectedWordsById] = useState<Record<string, any>>({});
-
-  // Debounce search
   useEffect(() => {
     const handler = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1); // Reset page on search
+      setDebouncedSearch(search.trim());
+      setPage(1);
     }, DEBOUNCE_DELAY);
     return () => clearTimeout(handler);
   }, [search]);
@@ -48,144 +115,167 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const params = new URLSearchParams({
         deckId,
         search: debouncedSearch,
         page: String(page),
-        limit: String(limit),
+        limit: String(PAGE_LIMIT),
       });
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/progress/words?${params}`, {
-        headers: authHeaders()
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/progress/words?${params}`, {
+        headers: authHeaders(),
       });
       const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.message || "Failed to fetch data");
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "Không thể tải dữ liệu.");
       }
-      if (json.success) {
-        setData(json.data.words || []);
-        setTotalPages(json.data.pagination?.totalPages || 1);
-      } else {
-        throw new Error(json.message || "Failed to fetch data");
+
+      if (!Array.isArray(json.data?.words)) {
+        throw new Error("Response /api/progress/words không có field data.words hợp lệ.");
       }
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
+
+      const nextPagination: Pagination = {
+        page: Number(json.data.pagination?.page ?? page),
+        totalPages: Number(json.data.pagination?.totalPages ?? 1),
+        totalItems: Number(json.data.pagination?.totalItems ?? json.data.words.length),
+        limit: Number(json.data.pagination?.limit ?? PAGE_LIMIT),
+      };
+
+      setData(json.data.words);
+      setPagination(nextPagination);
+      setTierSummary(json.data.tierSummary ?? null);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [deckId, debouncedSearch, page, authHeaders]);
+  }, [authHeaders, deckId, debouncedSearch, page]);
 
   useEffect(() => {
-    fetchData();
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
-  const getLevelColor = (level: string) => {
-    switch (level) {
-      case 'mastered': return '#22c55e'; // green
-      case 'familiar': return '#3b82f6'; // blue
-      case 'learning': return '#eab308'; // yellow
-      default: return '#9ca3af'; // gray
-    }
-  };
-
-  const getLevelLabel = (level: string) => {
-    switch (level) {
-      case 'mastered': return 'Mastered';
-      case 'familiar': return 'Familiar';
-      case 'learning': return 'Learning';
-      default: return 'Not Started';
-    }
-  };
-
-  // --- Selection Logic ---
-  const currentItemsOnPage = useMemo(() => data, [data]);
-  
-  const selectedCountOnPage = currentItemsOnPage.filter(item => selectedWordsById[item.wordId]).length;
-  const allOnPageSelected = currentItemsOnPage.length > 0 && selectedCountOnPage === currentItemsOnPage.length;
-  const isIndeterminate = selectedCountOnPage > 0 && selectedCountOnPage < currentItemsOnPage.length;
-
-  const toggleSelectAllPage = () => {
-    setSelectedWordsById(prev => {
-      const next = { ...prev };
-      if (allOnPageSelected) {
-        // Deselect all on current page
-        currentItemsOnPage.forEach(item => {
-          delete next[item.wordId];
-        });
-      } else {
-        // Select all on current page
-        currentItemsOnPage.forEach(item => {
-          next[item.wordId] = item;
-        });
-      }
-      return next;
-    });
-  };
-
-  const toggleSelectRow = (item: any) => {
-    setSelectedWordsById(prev => {
-      const next = { ...prev };
-      if (next[item.wordId]) {
-        delete next[item.wordId];
-      } else {
-        next[item.wordId] = item;
-      }
-      return next;
-    });
-  };
+  const summaryTotal = tierSummary
+    ? tierSummary.mastered + tierSummary.familiar + tierSummary.learning + tierSummary.not_started
+    : 0;
+  const shouldShowTierSummary = !!tierSummary && summaryTotal === tierSummary.total && summaryTotal === pagination.totalItems;
+  const summaryLabel = debouncedSearch ? "Tổng quan kết quả tìm kiếm" : "Tổng quan deck";
 
   const handleSpeak = (e: React.MouseEvent, word: string) => {
     e.stopPropagation();
-    if (word) {
-      speak(word);
-    }
+    if (word) speak(word);
   };
 
-  const handlePracticeWriting = async () => {
-    const selectedArray = Object.values(selectedWordsById);
-    if (selectedArray.length === 0) return;
+  const renderScore = (item: ProgressWordItem) => {
+    const recallScore = item.skills?.recall;
+    const hasRecallScore = recallScore !== null && recallScore !== undefined;
+    const safeRecallScore = hasRecallScore ? clampScore(recallScore) : null;
 
-    const validWords = selectedArray.filter(w => w && w.word);
-
-    if (validWords.length === 0) {
-      toast.error("Không có từ nào hợp lệ để luyện tập!");
-      return;
-    }
-
-    sessionStorage.setItem('writingWords', JSON.stringify(validWords));
-    router.push('/writing');
+    return (
+      <div className="dm-recall-cell" aria-label={`Recall của từ ${item.word || ""}`}>
+        {hasRecallScore ? (
+          <div className="dm-recall-row">
+            <span className="dm-recall-label">Recall</span>
+            <div
+              className="dm-recall-bar-wrap"
+              role="progressbar"
+              aria-label={`Recall của từ ${item.word || ""}`}
+              aria-valuenow={safeRecallScore ?? 0}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="dm-recall-bar"
+                style={{ width: `${safeRecallScore}%`, backgroundColor: RECALL_COLOR }}
+              />
+            </div>
+            <span className="dm-recall-val">{safeRecallScore}</span>
+          </div>
+        ) : (
+          <span className="dm-recall-empty">Chưa có dữ liệu Recall</span>
+        )}
+      </div>
+    );
   };
-
-  const totalSelectedCount = Object.keys(selectedWordsById).length;
-
 
   return (
     <div className="deck-mastery-view">
-      <div className="dm-header-actions">
-        <div className="dm-search-box">
-          <MagnifyingGlassIcon className="icon" />
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm từ vựng..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="dm-panel-header">
+        <div>
+          <p className="dm-eyebrow">Tiến độ từ vựng</p>
+          <h2>{deck?.name ? `Danh sách trong ${deck.name}` : "Danh sách từ vựng"}</h2>
+          <p className="dm-subtitle">
+            {debouncedSearch
+              ? `${pagination.totalItems} kết quả phù hợp`
+              : `${deck?.wordCount ?? pagination.totalItems} từ trong deck`}
+          </p>
         </div>
 
-        {totalPages > 1 && (
-          <div className="dm-pagination">
-            <button 
-              disabled={page <= 1} 
-              onClick={() => setPage(p => p - 1)}
+        <div className="dm-search-box">
+          <MagnifyingGlassIcon className="icon" />
+          <input
+            type="text"
+            placeholder="Tìm kiếm từ vựng..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Tìm kiếm từ vựng trong deck"
+          />
+        </div>
+      </div>
+
+      {shouldShowTierSummary && tierSummary && (
+        <section
+          className="dm-summary"
+          aria-label={summaryLabel}
+          title={summaryLabel}
+        >
+          <div className="dm-summary-heading">
+            <span>{summaryLabel}</span>
+            <strong>{tierSummary.total} từ</strong>
+          </div>
+          <div className="dm-summary-grid">
+            {SUMMARY_ORDER.map(({ key, shortLabel }) => {
+              const tierConfig = getTierConfig(key);
+              return (
+                <div className="dm-summary-item" key={key}>
+                  <span className="dm-summary-dot" style={{ background: tierConfig.color }} />
+                  <span>{shortLabel}</span>
+                  <strong>{tierSummary[key]}</strong>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <div className="dm-header-actions">
+        <p className="dm-results-note">
+          Hiển thị <strong>{data.length}</strong> / <strong>{pagination.totalItems}</strong> từ
+        </p>
+        {pagination.totalPages > 1 && (
+          <div className="dm-pagination" aria-label="Phân trang danh sách từ vựng">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((current) => current - 1)}
               className="dm-page-btn"
+              aria-label="Trang trước"
             >
               <ChevronLeftIcon className="icon" />
             </button>
-            <span>Trang {page} / {totalPages}</span>
-            <button 
-              disabled={page >= totalPages} 
-              onClick={() => setPage(p => p + 1)}
+            <span>
+              Trang {pagination.page} / {pagination.totalPages}
+            </span>
+            <button
+              disabled={page >= pagination.totalPages}
+              onClick={() => setPage((current) => current + 1)}
               className="dm-page-btn"
+              aria-label="Trang sau"
             >
               <ChevronRightIcon className="icon" />
             </button>
@@ -194,95 +284,76 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
       </div>
 
       {loading && data.length === 0 ? (
-        <div className="dm-loading">
-          <div className="spinner"></div>
-          <p>Đang tải dữ liệu...</p>
+        <div className="dm-skeleton" aria-label="Đang tải dữ liệu">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div className="dm-skeleton-row" key={index} />
+          ))}
         </div>
       ) : error ? (
         <div className="dm-error">
           <ExclamationTriangleIcon className="icon" />
           <p>{error}</p>
-          <button className="btn-primary" onClick={fetchData}>Thử lại</button>
+          <button className="btn-primary" onClick={fetchData}>
+            Thử lại
+          </button>
         </div>
       ) : data.length === 0 ? (
         <div className="dm-empty">
-          <p>Không có từ vựng nào phù hợp.</p>
+          <p>{debouncedSearch ? "Không tìm thấy từ phù hợp." : "Deck này chưa có từ vựng."}</p>
         </div>
       ) : (
         <div className="dm-table-container">
           <table className="dm-table">
             <thead>
               <tr>
-                <th style={{ width: "40px", textAlign: "center" }}>
-                  <input 
-                    type="checkbox" 
-                    checked={allOnPageSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = isIndeterminate;
-                    }}
-                    onChange={toggleSelectAllPage}
-                    title="Chọn/Bỏ chọn tất cả trang hiện tại"
-                  />
-                </th>
                 <th>Từ vựng</th>
                 <th>Nghĩa</th>
-                <th>Cấp độ</th>
-                <th style={{ textAlign: 'right' }}>Tổng điểm</th>
+                <th>Trạng thái học</th>
+                <th>Recall</th>
               </tr>
             </thead>
             <tbody>
-              {data.map((item, idx) => {
-                const isSelected = !!selectedWordsById[item.wordId];
-                const hasMeanings = item.meanings && item.meanings.length > 0;
+              {data.map((item) => {
+                const hasMeanings = Array.isArray(item.meanings) && item.meanings.length > 0;
+                const tierConfig = getTierConfig(item.tier);
 
                 return (
-                  <tr key={item.wordId || idx} className={isSelected ? "selected-row" : ""}>
-                    <td style={{ textAlign: "center" }}>
-                      <input 
-                        type="checkbox" 
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(item)}
-                      />
-                    </td>
+                  <tr key={item.wordId}>
                     <td>
                       <div className="dm-word-col">
                         <div className="dm-word-row">
                           <span className="dm-word">{item.word}</span>
-                          <button 
-                            className="dm-speak-btn" 
+                          <button
+                            className="dm-speak-btn"
                             onClick={(e) => handleSpeak(e, item.word)}
                             disabled={!item.word}
-                            aria-label={`Phát âm từ ${item.word}`}
+                            aria-label={`Phát âm từ ${item.word || ""}`}
                             title="Phát âm"
                           >
                             <SpeakerWaveIcon className="icon" />
                           </button>
                         </div>
-                        {item.pronunciation && <span className="dm-pron">/{item.pronunciation}/</span>}
+                        {item.pronunciation ? <span className="dm-pron">/{item.pronunciation}/</span> : null}
                       </div>
                     </td>
                     <td>
-                      <span className="dm-meanings" style={{ color: hasMeanings ? "inherit" : "var(--text-muted)", fontStyle: hasMeanings ? "normal" : "italic" }}>
-                        {hasMeanings ? item.meanings.join(", ") : "Chưa có nghĩa"}
+                      <span className={hasMeanings ? "dm-meanings" : "dm-meanings dm-muted"}>
+                        {hasMeanings ? item.meanings!.join(", ") : "Chưa có nghĩa"}
                       </span>
                     </td>
                     <td>
-                      <span 
-                        className="dm-tier-badge" 
-                        style={{ 
-                          backgroundColor: `${getLevelColor(item.tier)}15`,
-                          color: getLevelColor(item.tier),
-                          border: `1px solid ${getLevelColor(item.tier)}30`
+                      <span
+                        className="dm-tier-badge"
+                        style={{
+                          backgroundColor: `${tierConfig.color}18`,
+                          color: tierConfig.color,
+                          border: `1px solid ${tierConfig.color}40`,
                         }}
                       >
-                        {getLevelLabel(item.tier)}
+                        {tierConfig.label}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span className="dm-score">
-                        {Math.round(item.totalScore || 0)}
-                      </span>
-                    </td>
+                    <td>{renderScore(item)}</td>
                   </tr>
                 );
               })}
@@ -291,44 +362,51 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
         </div>
       )}
 
-      <div className="dm-bottom-section">
-
-        {totalSelectedCount > 0 && (
-          <div className="dm-action-bar">
-            <span>Đã chọn <strong>{totalSelectedCount}</strong> từ trên nhiều trang</span>
-            <div className="dm-action-buttons">
-              <button className="dm-btn-text" onClick={() => setSelectedWordsById({})}>
-                Bỏ chọn tất cả
-              </button>
-              <button className="btn-primary" onClick={handlePracticeWriting}>
-                Luyện viết
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
       <style jsx>{`
         .deck-mastery-view {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 18px;
           background: var(--bg-card);
           border: 1px solid var(--border);
           border-radius: 12px;
           padding: 24px;
         }
 
-        .dm-header-actions {
+        .dm-panel-header {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 16px;
         }
 
+        .dm-eyebrow {
+          margin: 0 0 4px;
+          color: var(--text-muted);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0;
+          text-transform: uppercase;
+        }
+
+        .dm-panel-header h2 {
+          margin: 0;
+          color: var(--text-primary);
+          font-size: 20px;
+          line-height: 1.25;
+        }
+
+        .dm-subtitle,
+        .dm-results-note {
+          margin: 6px 0 0;
+          color: var(--text-secondary);
+          font-size: 14px;
+        }
+
         .dm-search-box {
           position: relative;
-          width: 300px;
+          width: min(320px, 100%);
+          flex: 0 0 320px;
         }
 
         .dm-search-box .icon {
@@ -356,18 +434,83 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
           border-color: var(--primary-color);
         }
 
-        .dm-loading, .dm-error, .dm-empty {
+        .dm-summary {
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 14px;
+          background: var(--bg-body);
+        }
+
+        .dm-summary-heading,
+        .dm-summary-item,
+        .dm-header-actions,
+        .dm-pagination,
+        .dm-word-row,
+        .dm-recall-row {
+          display: flex;
+          align-items: center;
+        }
+
+        .dm-summary-heading {
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+          color: var(--text-secondary);
+          font-size: 13px;
+        }
+
+        .dm-summary-heading strong {
+          color: var(--text-primary);
+        }
+
+        .dm-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .dm-summary-item {
+          justify-content: space-between;
+          gap: 8px;
+          min-width: 0;
+          padding: 8px 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          color: var(--text-secondary);
+          font-size: 13px;
+          background: var(--bg-card);
+        }
+
+        .dm-summary-item strong {
+          color: var(--text-primary);
+        }
+
+        .dm-summary-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          flex: 0 0 auto;
+        }
+
+        .dm-header-actions {
+          justify-content: space-between;
+          gap: 16px;
+        }
+
+        .dm-loading,
+        .dm-error,
+        .dm-empty {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 60px 20px;
+          padding: 56px 20px;
           gap: 16px;
           color: var(--text-muted);
         }
 
         .dm-error {
-          color: #EF4444;
+          color: #ef4444;
         }
 
         .dm-error .icon {
@@ -375,17 +518,23 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
           height: 40px;
         }
 
-        .spinner {
-          width: 30px;
-          height: 30px;
-          border: 3px solid var(--border);
-          border-top-color: var(--primary-color);
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
+        .dm-skeleton {
+          display: grid;
+          gap: 10px;
         }
 
-        @keyframes spin {
-          to { transform: rotate(360deg); }
+        .dm-skeleton-row {
+          height: 64px;
+          border-radius: 8px;
+          background: linear-gradient(90deg, var(--bg-body), var(--border), var(--bg-body));
+          background-size: 200% 100%;
+          animation: shimmer 1.2s linear infinite;
+        }
+
+        @keyframes shimmer {
+          to {
+            background-position-x: -200%;
+          }
         }
 
         .dm-table-container {
@@ -396,22 +545,25 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
 
         .dm-table {
           width: 100%;
+          min-width: 860px;
           border-collapse: collapse;
           text-align: left;
         }
 
-        .dm-table th, .dm-table td {
+        .dm-table th,
+        .dm-table td {
           padding: 16px 20px;
           border-bottom: 1px solid var(--border);
+          vertical-align: middle;
         }
 
         .dm-table th {
           background: var(--bg-body);
-          font-weight: 600;
+          font-weight: 700;
           color: var(--text-secondary);
           font-size: 13px;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 0;
         }
 
         .dm-table tbody tr {
@@ -421,51 +573,47 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
         .dm-table tbody tr:hover {
           background: var(--bg-body);
         }
-        
-        .dm-table tbody tr.selected-row {
-          background: rgba(59, 130, 246, 0.05);
-        }
 
         .dm-word-col {
           display: flex;
           flex-direction: column;
           gap: 4px;
         }
-        
+
         .dm-word-row {
-          display: flex;
-          align-items: center;
           gap: 8px;
         }
 
         .dm-word {
-          font-weight: 600;
+          font-weight: 700;
           color: var(--text-primary);
         }
-        
+
         .dm-speak-btn {
+          width: 28px;
+          height: 28px;
           background: transparent;
           border: none;
           color: var(--text-muted);
           cursor: pointer;
           padding: 4px;
-          border-radius: 4px;
+          border-radius: 6px;
           display: flex;
           align-items: center;
           justify-content: center;
           transition: all 0.2s;
         }
-        
+
         .dm-speak-btn:hover:not(:disabled) {
           color: var(--primary-color);
           background: var(--bg-body);
         }
-        
+
         .dm-speak-btn:disabled {
           opacity: 0.3;
           cursor: not-allowed;
         }
-        
+
         .dm-speak-btn .icon {
           width: 18px;
           height: 18px;
@@ -485,36 +633,71 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
           overflow: hidden;
         }
 
+        .dm-muted {
+          color: var(--text-muted);
+          font-style: italic;
+        }
+
         .dm-tier-badge {
           display: inline-block;
-          padding: 4px 10px;
-          border-radius: 20px;
+          padding: 5px 10px;
+          border-radius: 999px;
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
         }
 
-        .dm-score {
-          font-weight: 600;
-          color: var(--text-primary);
+        .dm-recall-cell {
+          width: min(100%, 300px);
         }
 
-        .dm-bottom-section {
-          position: sticky;
-          bottom: -24px; /* padding offset */
-          background: var(--bg-card);
-          padding: 16px 0;
-          border-top: 1px solid var(--border);
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
+        .dm-recall-row {
+          display: grid;
+          grid-template-columns: 52px minmax(110px, 1fr) 36px;
+          align-items: center;
+          gap: 10px;
+          padding: 6px 8px;
+          border-radius: 8px;
+          background-color: rgba(59, 130, 246, 0.08);
+        }
+
+        .dm-recall-label {
+          color: #3b82f6;
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .dm-recall-bar-wrap {
+          height: 8px;
+          overflow: hidden;
+          border-radius: 999px;
+          background-color: var(--border);
+        }
+
+        .dm-recall-bar {
+          height: 100%;
+          min-width: 3px;
+          border-radius: inherit;
+        }
+
+        .dm-recall-val {
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 800;
+          font-variant-numeric: tabular-nums;
+          text-align: right;
+        }
+
+        .dm-recall-empty {
+          color: var(--text-muted);
+          font-size: 13px;
+          font-style: italic;
         }
 
         .dm-pagination {
-          display: flex;
-          align-items: center;
           justify-content: center;
-          gap: 16px;
+          gap: 12px;
           color: var(--text-secondary);
           font-size: 14px;
         }
@@ -547,58 +730,30 @@ export default function DeckMasteryView({ deckId }: DeckMasteryViewProps) {
           width: 16px;
           height: 16px;
         }
-        
-        .dm-action-bar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: var(--primary-color);
-          color: white;
-          padding: 12px 24px;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-          animation: slideUp 0.3s ease-out;
-        }
-        
-        .dm-action-buttons {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-        
-        .dm-btn-text {
-          background: transparent;
-          border: none;
-          color: rgba(255, 255, 255, 0.8);
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-        }
-        
-        .dm-btn-text:hover {
-          color: white;
-          text-decoration: underline;
-        }
-        
-        .dm-action-bar .btn-primary {
-          background: white;
-          color: var(--primary-color);
-          border: none;
-          padding: 8px 16px;
-          border-radius: 6px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        
-        .dm-action-bar .btn-primary:hover {
-          background: #f8fafc;
-          transform: translateY(-1px);
-        }
-        
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+
+        @media (max-width: 760px) {
+          .deck-mastery-view {
+            padding: 16px;
+          }
+
+          .dm-panel-header,
+          .dm-header-actions {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .dm-search-box {
+            width: 100%;
+            flex: none;
+          }
+
+          .dm-summary-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .dm-results-note {
+            margin-top: 0;
+          }
         }
       `}</style>
     </div>
