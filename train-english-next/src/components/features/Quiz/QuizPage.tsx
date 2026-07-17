@@ -24,7 +24,8 @@ import {
   DocumentTextIcon,
   ForwardIcon,
   CommandLineIcon,
-  LanguageIcon
+  LanguageIcon,
+  PhotoIcon
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { checkAnswer } from '@/lib/utils/answerUtils'
@@ -45,6 +46,10 @@ import {
   type SourceScope,
   type TranslationDirection,
 } from './quizPlanner'
+import QuizQuestionImage from './QuizQuestionImage'
+import VocabularyFeedbackCard from './VocabularyFeedbackCard'
+import CustomSelect from '@/components/shared/CustomSelect/CustomSelect'
+import HelpTooltip from '@/components/shared/HelpTooltip/HelpTooltip'
 
 // ===== TYPES =====
 interface DeckRef {
@@ -97,6 +102,7 @@ interface QuizSettings {
   combineStrategy: CombineStrategy
   filterStarredOnly?: boolean
   requireRetypeOnWrong: boolean
+  showImageInQuestion: boolean
 }
 
 interface QuizQuestion {
@@ -232,13 +238,36 @@ const defaultSettings: QuizSettings = {
   sourceScope: 'all',
   sourceOrder: 'random',
   combineStrategy: 'smart',
-  requireRetypeOnWrong: false
+  requireRetypeOnWrong: false,
+  showImageInQuestion: true
 }
 
 // ===== COMPONENT =====
 export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord, speak, stopSpeaking, submitProgress, onQuizActiveChange }: QuizPageProps) {
   const { ttsAccent, ttsSettingsReady } = useGlobalData()
-  const [settings, setSettings] = useState<QuizSettings>({ ...defaultSettings })
+  const [settings, setSettings] = useState<QuizSettings>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('quizSettings')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          // Do not persist filters to avoid empty states when switching contexts
+          return {
+            ...defaultSettings,
+            ...parsed,
+            filterDeck: '',
+            filterLevel: '',
+            filterTopic: '',
+            filterPOS: '',
+            filterTier: 'all'
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse quiz settings', e)
+      }
+    }
+    return { ...defaultSettings }
+  })
   const [activeSettings, setActiveSettings] = useState<QuizSettings | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [isTTSSettingsOpen, setIsTTSSettingsOpen] = useState(false)
@@ -265,6 +294,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   const settingsLoaded = true
   const fillInputRef = useRef<HTMLInputElement>(null)
   const autoNextTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const advanceLockRef = useRef(false)
   const spokenQuestionIdx = useRef<number>(-1)
   const plannerSessionRef = useRef<QuizSessionState<VocabularyItem> | null>(null)
 
@@ -355,6 +385,15 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     onQuizActiveChange?.(started)
   }, [started, onQuizActiveChange])
 
+  // Save settings to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Exclude filters from being saved to avoid contextual issues
+      const { filterDeck, filterLevel, filterTopic, filterPOS, filterTier, ...settingsToSave } = settings
+      localStorage.setItem('quizSettings', JSON.stringify(settingsToSave))
+    }
+  }, [settings])
+
   const updateSetting = useCallback((key: keyof QuizSettings, value: unknown) => {
     setSettings(prev => {
       if (key === 'sourceMode') {
@@ -411,6 +450,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     setHintUsed(false)
     setShowHintText(false)
     setShowExampleTranslation(false)
+    advanceLockRef.current = false
   }, [])
 
   const syncPlannerSession = useCallback((session: QuizSessionState<VocabularyItem>) => {
@@ -480,6 +520,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   }
 
   const goNext = useCallback(() => {
+    if (advanceLockRef.current) return
+    advanceLockRef.current = true
     if (autoNextTimer.current) clearTimeout(autoNextTimer.current)
     const session = plannerSessionRef.current
     if (session && session.answeredCount < session.settings.questionCount && currentIdx + 1 >= questions.length) {
@@ -804,72 +846,123 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
               </div>
               
               <div className="quiz-config-grid">
-                <div className="quiz-config-field" title="Hướng hỏi">
-                  <span className="quiz-config-label">Hướng</span>
-                  <div className="quiz-config-select-wrapper">
-                    <select
-                      className="quiz-config-select"
-                      value={settings.mode}
-                      onChange={e => updateSetting('mode', e.target.value)}
-                    >
-                      <option value="en2vi">Anh → Việt</option>
-                      <option value="vi2en">Việt → Anh</option>
-                      <option value="mixed">Trộn lẫn</option>
-                    </select>
-                    <ChevronDownIcon className="quiz-config-select-icon" />
-                  </div>
+                <div className="quiz-config-field">
+                  <span className="quiz-config-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    Hướng
+                    <HelpTooltip placement="bottom" content={
+                      <div>
+                        <div className="ht-header"><span className="ht-header-icon">🔁</span><span className="ht-header-title">Hướng dịch</span></div>
+                        <div className="ht-body">
+                          <p className="ht-desc">Xác định câu hỏi hiển thị từ hay nghĩa trước.</p>
+                          <div className="ht-options">
+                            <div className="ht-opt"><span className="ht-opt-badge">Anh→Việt</span><span className="ht-opt-text">Thấy từ tiếng Anh → nhớ nghĩa. <em>Phù hợp người mới bắt đầu.</em></span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Việt→Anh</span><span className="ht-opt-text">Thấy nghĩa tiếng Việt → nhớ từ. <em>Khó hơn, luyện khả năng sản xuất.</em></span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Trộn lẫn</span><span className="ht-opt-text">Cả hai hướng xen kẽ ngẫu nhiên. <em>Luyện toàn diện nhất.</em></span></div>
+                          </div>
+                          <div className="ht-tip"><span className="ht-tip-icon">💡</span><span>Khi đã quen, hãy chuyển sang <strong>Trộn lẫn</strong> để não không bị học theo một chiều.</span></div>
+                        </div>
+                      </div>
+                    } />
+                  </span>
+                  <CustomSelect
+                    value={settings.mode}
+                    onChange={v => updateSetting('mode', v)}
+                    options={[
+                      { value: 'en2vi', label: 'Anh → Việt' },
+                      { value: 'vi2en', label: 'Việt → Anh' },
+                      { value: 'mixed', label: 'Trộn lẫn' },
+                    ]}
+                  />
                 </div>
 
-                <div className="quiz-config-field" title="Nguồn từ">
-                  <span className="quiz-config-label">Nguồn</span>
-                  <div className="quiz-config-select-wrapper">
-                    <select
-                      className="quiz-config-select"
-                      value={settings.sourceMode}
-                      onChange={e => updateSetting('sourceMode', e.target.value)}
-                    >
-                      <option value="random">Ngẫu nhiên</option>
-                      <option value="weak">Từ yếu</option>
-                      <option value="due">Cần ôn tập</option>
-                      <option value="deck">Chỉ trong bộ</option>
-                    </select>
-                    <ChevronDownIcon className="quiz-config-select-icon" />
-                  </div>
+                <div className="quiz-config-field">
+                  <span className="quiz-config-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    Nguồn
+                    <HelpTooltip placement="bottom" content={
+                      <div>
+                        <div className="ht-header"><span className="ht-header-icon">🎯</span><span className="ht-header-title">Nguồn từ vựng</span></div>
+                        <div className="ht-body">
+                          <p className="ht-desc">Quy định hệ thống lấy từ đâu để tạo câu hỏi.</p>
+                          <div className="ht-options">
+                            <div className="ht-opt"><span className="ht-opt-badge">Ngẫu nhiên</span><span className="ht-opt-text">Lấy ngẫu nhiên từ toàn bộ kho từ vựng của bạn.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Từ yếu</span><span className="ht-opt-text">Ưu tiên từ có điểm thành thạo thấp nhất (dưới 40 điểm). <em>Tập trung vào điểm yếu.</em></span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Cần ôn tập</span><span className="ht-opt-text">Chỉ lấy từ đã đến hạn ôn theo lịch lặp cách quãng (Spaced Repetition). <em>Tối ưu nhất cho trí nhớ dài hạn.</em></span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Trong bộ</span><span className="ht-opt-text">Giới hạn trong bộ thẻ đã chọn bên cạnh.</span></div>
+                          </div>
+                          <div className="ht-tip"><span className="ht-tip-icon">🔥</span><span>Combo <strong>Từ yếu</strong> + <strong>Điền từ</strong> = cực kỳ hiệu quả để xử lý từ hay quên.</span></div>
+                        </div>
+                      </div>
+                    } />
+                  </span>
+                  <CustomSelect
+                    value={settings.sourceMode}
+                    onChange={v => updateSetting('sourceMode', v)}
+                    options={[
+                      { value: 'random', label: 'Ngẫu nhiên' },
+                      { value: 'weak', label: 'Từ yếu' },
+                      { value: 'due', label: 'Cần ôn tập' },
+                      { value: 'deck', label: 'Chỉ trong bộ' },
+                    ]}
+                  />
                 </div>
 
-                <div className="quiz-config-field" title="Bộ thẻ">
-                  <span className="quiz-config-label">Bộ thẻ</span>
-                  <div className="quiz-config-select-wrapper">
-                    <select
-                      className="quiz-config-select"
-                      value={settings.filterDeck}
-                      onChange={e => updateSetting('filterDeck', e.target.value)}
-                    >
-                      <option value="">Tất cả</option>
-                      {decks.map(d => (
-                        <option key={d._id} value={d._id}>{d.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDownIcon className="quiz-config-select-icon" />
-                  </div>
+                <div className="quiz-config-field">
+                  <span className="quiz-config-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    Bộ thẻ
+                    <HelpTooltip placement="bottom" content={
+                      <div>
+                        <div className="ht-header"><span className="ht-header-icon">📦</span><span className="ht-header-title">Lọc theo bộ thẻ</span></div>
+                        <div className="ht-body">
+                          <p className="ht-desc">Giới hạn câu hỏi chỉ lấy từ một bộ thẻ cụ thể.</p>
+                          <div className="ht-how">
+                            <div className="ht-how-label">Cơ chế</div>
+                            Chọn <strong>Tất cả</strong> → lấy từ toàn bộ kho từ vựng.<br/>Chọn một bộ cụ thể → chỉ lấy từ trong bộ đó, ngay cả khi Nguồn là "Ngẫu nhiên".
+                          </div>
+                          <div className="ht-tip"><span className="ht-tip-icon">📚</span><span>Dùng bộ thẻ khi học theo chủ đề (VD: Bộ "Du lịch", "Công việc").</span></div>
+                        </div>
+                      </div>
+                    } />
+                  </span>
+                  <CustomSelect
+                    value={settings.filterDeck}
+                    onChange={v => updateSetting('filterDeck', v)}
+                    options={[
+                      { value: '', label: 'Tất cả' },
+                      ...decks.map(d => ({ value: d._id, label: d.name })),
+                    ]}
+                  />
                 </div>
 
-                <div className="quiz-config-field" title="Độ thành thạo">
-                  <span className="quiz-config-label">Độ thành thạo</span>
-                  <div className="quiz-config-select-wrapper">
-                    <select
-                      className="quiz-config-select"
-                      value={settings.filterTier}
-                      onChange={e => updateSetting('filterTier', e.target.value)}
-                    >
-                      <option value="all">Tất cả</option>
-                      <option value="not_started">Chưa học (0)</option>
-                      <option value="learning">Đang học (1-39)</option>
-                      <option value="familiar">Khá quen (40-79)</option>
-                      <option value="mastered">Thành thạo (80+)</option>
-                    </select>
-                    <ChevronDownIcon className="quiz-config-select-icon" />
-                  </div>
+                <div className="quiz-config-field">
+                  <span className="quiz-config-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    Độ thành thạo
+                    <HelpTooltip placement="bottom" content={
+                      <div>
+                        <div className="ht-header"><span className="ht-header-icon">📊</span><span className="ht-header-title">Lọc theo mức thành thạo</span></div>
+                        <div className="ht-body">
+                          <p className="ht-desc">Mỗi từ có điểm 0–100. Trả lời đúng → tăng điểm, sai → giảm điểm.</p>
+                          <div className="ht-options">
+                            <div className="ht-opt"><span className="ht-opt-badge">0 điểm</span><span className="ht-opt-text">Chưa từng luyện hoặc liên tục sai.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">1–39</span><span className="ht-opt-text">Đang học, hay quên. Cần ôn nhiều lần.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">40–79</span><span className="ht-opt-text">Khá quen nhưng chưa chắc chắn.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">80+</span><span className="ht-opt-text">Thành thạo, gần như không quên.</span></div>
+                          </div>
+                          <div className="ht-tip"><span className="ht-tip-icon">💡</span><span>Lọc <strong>Đang học (1–39)</strong> để tập trung vào những từ chưa vào não.</span></div>
+                        </div>
+                      </div>
+                    } />
+                  </span>
+                  <CustomSelect
+                    value={settings.filterTier}
+                    onChange={v => updateSetting('filterTier', v)}
+                    options={[
+                      { value: 'all', label: 'Tất cả' },
+                      { value: 'not_started', label: 'Chưa học (0)' },
+                      { value: 'learning', label: 'Đang học (1-39)' },
+                      { value: 'familiar', label: 'Khá quen (40-79)' },
+                      { value: 'mastered', label: 'Thành thạo (80+)' },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -891,7 +984,25 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
               })()}
 
               <div style={{ marginBottom: '28px' }}>
-                <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px' }}>Loại câu hỏi</span>
+                <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  Loại câu hỏi
+                  <HelpTooltip placement="right" content={
+                    <div>
+                      <div className="ht-header"><span className="ht-header-icon">❓</span><span className="ht-header-title">Dạng câu hỏi</span></div>
+                      <div className="ht-body">
+                        <div className="ht-options">
+                          <div className="ht-opt"><span className="ht-opt-badge">Trắc nghiệm</span><span className="ht-opt-text">1 đáp án đúng trong 4. Lựa chọn sai lấy từ kho từ vựng. <em>Dễ nhất, phù hợp khởi động.</em></span></div>
+                          <div className="ht-opt"><span className="ht-opt-badge">Điền từ</span><span className="ht-opt-text">Tự gõ câu trả lời, chấp nhận lỗi chính tả nhỏ. <em>Khó nhất, hiệu quả nhất cho trí nhớ dài hạn.</em></span></div>
+                          <div className="ht-opt"><span className="ht-opt-badge">Nghe</span><span className="ht-opt-text">Nghe audio TTS rồi chọn từ đúng. <em>Luyện kỹ năng nghe chính xác.</em></span></div>
+                        </div>
+                        <div className="ht-how">
+                          <div className="ht-how-label">Lưu ý</div>
+                          Có thể bật nhiều loại cùng lúc. Cài "Cách kết hợp" bên dưới để điều chỉnh tỉ lệ.
+                        </div>
+                      </div>
+                    </div>
+                  } />
+                </span>
                 <div className="flex gap-3">
                   {([
                     { id: 'multiple', label: 'Trắc nghiệm', icon: null },
@@ -925,7 +1036,22 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
 
               {settings.questionTypes.length > 1 && (
                 <div style={{ marginBottom: '28px' }}>
-                  <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px' }}>Cách kết hợp</span>
+                  <span className="quiz-config-label block mb-2" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    Cách kết hợp
+                    <HelpTooltip placement="right" content={
+                      <div>
+                        <div className="ht-header"><span className="ht-header-icon">🧠</span><span className="ht-header-title">Cách kết hợp loại câu hỏi</span></div>
+                        <div className="ht-body">
+                          <p className="ht-desc">Áp dụng khi bạn bật nhiều hơn 1 loại câu hỏi.</p>
+                          <div className="ht-options">
+                            <div className="ht-opt"><span className="ht-opt-badge">Thông minh</span><span className="ht-opt-text">AI tự chọn dạng câu phù hợp nhất cho mỗi từ dựa trên điểm thành thạo. <em>Từ yếu → Điền từ nhiều hơn. Từ mạnh → Trắc nghiệm.</em></span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Xen kẽ đều</span><span className="ht-opt-text">Luân phiên lần lượt theo thứ tự: Trắc nghiệm → Điền từ → Nghe → lặp lại.</span></div>
+                          </div>
+                          <div className="ht-tip"><span className="ht-tip-icon">💡</span><span><strong>Thông minh</strong> giúp bạn không mất thời gian vào từ đã thuộc quá rồi.</span></div>
+                        </div>
+                      </div>
+                    } />
+                  </span>
                   <div className="flex p-1 mt-1 quiz-segmented-container">
                     <button
                       className={`flex-1 text-[15px] font-medium quiz-segmented-item ${
@@ -951,7 +1077,23 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
 
               <div style={{ marginBottom: '32px' }}>
                 <div className="flex justify-between items-end mb-2" style={{ marginBottom: '12px' }}>
-                  <span className="quiz-config-label">Số câu hỏi</span>
+                  <span className="quiz-config-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    Số câu hỏi
+                    <HelpTooltip placement="right" content={
+                      <div>
+                        <div className="ht-header"><span className="ht-header-icon">🔢</span><span className="ht-header-title">Số câu mỗi buổi luyện</span></div>
+                        <div className="ht-body">
+                          <div className="ht-options">
+                            <div className="ht-opt"><span className="ht-opt-badge">10</span><span className="ht-opt-text">Ôn nhanh ~3 phút. Phù hợp lúc rảnh ngắn.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">20–30</span><span className="ht-opt-text">Buổi học chuẩn ~10–15 phút. Đủ để có cảm giác tiến bộ.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">50</span><span className="ht-opt-text">Học sâu ~25 phút. Tốt khi có nhiều thời gian.</span></div>
+                            <div className="ht-opt"><span className="ht-opt-badge">Tất cả</span><span className="ht-opt-text">Luyện toàn bộ từ khả dụng. Số câu thực tế giới hạn bởi số từ hiện có.</span></div>
+                          </div>
+                          <div className="ht-tip"><span className="ht-tip-icon">📅</span><span>Học <strong>20–30 câu mỗi ngày</strong> đều đặn hiệu quả hơn gấp 3 lần so với học 100 câu/tuần.</span></div>
+                        </div>
+                      </div>
+                    } />
+                  </span>
                   <span className="text-[12px] text-gray-500">
                     {settings.questionCount > 50 ? availableCount : settings.questionCount} câu · {availableCount} từ khả dụng
                   </span>
@@ -984,7 +1126,21 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
                       <ArrowsRightLeftIcon className="w-5 h-5" />
                     </div>
                     <div className="quiz-toggle-info">
-                      <span className="quiz-toggle-title">Trộn câu hỏi</span>
+                      <span className="quiz-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        Trộn câu hỏi
+                        <HelpTooltip placement="top" content={
+                          <div>
+                            <div className="ht-header"><span className="ht-header-icon">🔀</span><span className="ht-header-title">Trộn thứ tự câu hỏi</span></div>
+                            <div className="ht-body">
+                              <div className="ht-how">
+                                <div className="ht-how-label">Tại sao cần bật?</div>
+                                Khi tắt, não bạn có thể vô tình học theo vị trí ("câu 3 là apple") thay vì nhớ thực sự từ đó. Bật trộn giúp não tập truy xuất ngẫu nhiên — đúng cách não lưu trí nhớ.
+                              </div>
+                              <div className="ht-tip"><span className="ht-tip-icon">✅</span><span>Nên <strong>bật</strong> trong hầu hết trường hợp.</span></div>
+                            </div>
+                          </div>
+                        } />
+                      </span>
                     </div>
                   </div>
                   <button 
@@ -1003,7 +1159,22 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
                       <ForwardIcon className="w-5 h-5" />
                     </div>
                     <div className="quiz-toggle-info">
-                      <span className="quiz-toggle-title">Tự động chuyển</span>
+                      <span className="quiz-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        Tự động chuyển
+                        <HelpTooltip placement="top" content={
+                          <div>
+                            <div className="ht-header"><span className="ht-header-icon">⏩</span><span className="ht-header-title">Tự động sang câu tiếp</span></div>
+                            <div className="ht-body">
+                              <div className="ht-how">
+                                <div className="ht-how-label">Cơ chế hoạt động</div>
+                                <strong>Bật:</strong> sau khi trả lời đúng, đợi ~1.5 giây rồi tự chuyển sang câu kế. Không cần nhấn bất kỳ nút nào.<br/><br/>
+                                <strong>Tắt:</strong> phải nhấn nút "Tiếp theo" thủ công — cho phép bạn đọc kỹ đáp án, ví dụ, phát âm trước khi tiếp tục.
+                              </div>
+                              <div className="ht-tip"><span className="ht-tip-icon">⚡</span><span>Bật khi muốn tốc độ cao. Tắt khi muốn hiểu sâu từng từ.</span></div>
+                            </div>
+                          </div>
+                        } />
+                      </span>
                     </div>
                   </div>
                   <button 
@@ -1022,7 +1193,21 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
                       <SpeakerWaveIcon className="w-5 h-5" />
                     </div>
                     <div className="quiz-toggle-info">
-                      <span className="quiz-toggle-title">Tự động phát âm</span>
+                      <span className="quiz-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        Tự động phát âm
+                        <HelpTooltip placement="top" content={
+                          <div>
+                            <div className="ht-header"><span className="ht-header-icon">🔊</span><span className="ht-header-title">Tự động phát âm</span></div>
+                            <div className="ht-body">
+                              <div className="ht-how">
+                                <div className="ht-how-label">Cơ chế hoạt động</div>
+                                Ngay khi câu hỏi xuất hiện, hệ thống tự phát âm từ tiếng Anh qua Text-to-Speech (TTS) với giọng đọc đã cài đặt (Anh–Mỹ hoặc Anh–Anh).
+                              </div>
+                              <div className="ht-tip"><span className="ht-tip-icon">🎧</span><span>Bật để luyện nghe <strong>thụ động</strong> — não quen âm thanh của từ mà không cần cố tình lắng nghe.</span></div>
+                            </div>
+                          </div>
+                        } />
+                      </span>
                     </div>
                   </div>
                   <button 
@@ -1059,6 +1244,39 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
                     <span className="ui-switch-knob" />
                   </button>
                 </div>
+
+                <div className="quiz-toggle-card" title="Hiển thị ảnh minh họa nếu từ vựng có ảnh">
+                  <div className="quiz-toggle-info-wrapper">
+                    <div className="quiz-toggle-icon-bg">
+                      <PhotoIcon className="w-5 h-5" />
+                    </div>
+                    <div className="quiz-toggle-info">
+                      <span className="quiz-toggle-title" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        Hiển thị ảnh
+                        <HelpTooltip placement="top" content={
+                          <div>
+                            <div className="ht-header"><span className="ht-header-icon">🖼️</span><span className="ht-header-title">Hiển thị ảnh minh họa</span></div>
+                            <div className="ht-body">
+                              <div className="ht-how">
+                                <div className="ht-how-label">Cơ chế hoạt động</div>
+                                Nếu từ vựng có ảnh đính kèm, ảnh sẽ xuất hiện trong câu hỏi. Ảnh giúp tạo "liên kết hình ảnh" trong não — một trong những kỹ thuật ghi nhớ mạnh nhất (Visual Memory Encoding).
+                              </div>
+                              <div className="ht-tip"><span className="ht-tip-icon">🧠</span><span>Não ghi nhớ hình ảnh nhanh hơn chữ tới <strong>60.000 lần</strong>. Hãy thêm ảnh cho từ vựng của bạn!</span></div>
+                            </div>
+                          </div>
+                        } />
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    className={`ui-switch ${settings.showImageInQuestion ? 'active' : ''}`}
+                    onClick={() => updateSetting('showImageInQuestion', !settings.showImageInQuestion)}
+                    role="switch"
+                    aria-checked={settings.showImageInQuestion}
+                  >
+                    <span className="ui-switch-knob" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1089,6 +1307,17 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   // ===== RENDER: Active Question =====
   const q = questions[currentIdx]
   const isStarred = starred.has(vocabularies.indexOf(q.vocab))
+
+  // Derived states for feedback
+  const hasSubmittedCurrentQuestion = answered;
+  const isCurrentAnswerCorrect = q.type === 'fill' ? fillCorrect === true : (q.type === 'listen' || q.type === 'multiple' ? selected === q.correctIdx : false);
+  const isUnknownAnswer = selected === -1;
+  const isFillWrongAndRequiresRetype = q.type === 'fill' && fillCorrect === false && activeSettings?.requireRetypeOnWrong;
+  const isAutoNextScheduled = isCurrentAnswerCorrect && (activeSettings || settings).autoNext;
+  
+  const shouldShowDetailedFeedback = hasSubmittedCurrentQuestion;
+  const shouldShowContinueButton = hasSubmittedCurrentQuestion && !isAutoNextScheduled && !isFillWrongAndRequiresRetype;
+  const isTargetHidden = !hasSubmittedCurrentQuestion && (q.type === 'listen' || (q.type === 'fill' && q.direction === 'vi2en'));
 
   function renderQuestion() {
     if (q.type === 'fill') return renderFillQuestion()
@@ -1191,21 +1420,6 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
             </button>
           )}
         </div>
-        {answered && fillCorrect === true && (
-          <div className="quiz-fill-feedback correct">
-            <CheckIcon className="icon" /> Chính xác!
-          </div>
-        )}
-        {answered && fillCorrect === false && (
-          <div className="quiz-fill-feedback wrong">
-            <XMarkIcon className="icon" /> Sai rồi! Đáp án đúng: <strong>{q.correctAnswer}</strong>
-          </div>
-        )}
-        {answered && (!activeSettings?.requireRetypeOnWrong || fillCorrect === true) && !(fillCorrect === true && (activeSettings?.autoNext || settings.autoNext)) && (
-          <button className="btn-primary" onClick={handleNext} style={{ marginTop: '16px' }}>
-            Tiếp tục
-          </button>
-        )}
         {!answered && (
           <button className="quiz-dont-know" onClick={handleDontKnow} style={{ marginTop: 12 }}>
             Hiển thị đáp án
@@ -1284,86 +1498,40 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     )
   }
 
-  function renderFeedback() {
-    if (!answered) return null
-    // For fill mode, feedback is inline
-    if (q.type === 'fill' && fillCorrect !== null) return null
-
-    const isCorrect = q.type === 'multiple' || q.type === 'listen'
-      ? selected === q.correctIdx
-      : fillCorrect === true
-
-    if (isCorrect && settings.autoNext) return null // auto-next will handle
-
-    const hasExample = q.vocab.examples && q.vocab.examples.length > 0
-    const hasSynonyms = q.vocab.synonyms && q.vocab.synonyms.length > 0
-    const hasExtra = hasExample || hasSynonyms
-
-    return (
-      <div className="quiz-feedback-section">
-        <div className={`quiz-feedback ${isCorrect ? 'quiz-feedback-correct' : 'quiz-feedback-wrong'}`}>
-          
-          <div className="quiz-feedback-content">
-            {q.vocab.imageUrl && (
-              <div className="quiz-feedback-image">
-                <img src={q.vocab.imageUrl} alt={q.vocab.word} onError={e => (e.currentTarget.style.display = 'none')} />
-              </div>
-            )}
-            <p className="quiz-feedback-text">
-              {isCorrect ? '✓ Chính xác!' : <>Đáp án đúng là: <strong>
-                {q.direction === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}
-              </strong></>}
-            </p>
-          </div>
-
-          {hasExtra && (
-            <div className="quiz-feedback-extra">
-              {hasExample && (
-                <div className="quiz-feedback-row quiz-feedback-example-block">
-                  <span className="quiz-feedback-label">Ví dụ: </span>
-                  <div className="quiz-feedback-example-text">
-                    <span className="text-dotted">{q.vocab.examples[0].en}</span>
-                    <div className="quiz-feedback-actions">
-                      <button type="button" aria-label="Phát âm câu ví dụ" className="quiz-action-btn" onClick={() => speak(q.vocab.examples[0].en, { mode: 'manual', source: 'quiz-example', ownerId: 'quiz-session' })}>
-                        <SpeakerWaveIcon className="icon" />
-                      </button>
-                      {q.vocab.examples[0].vi && (
-                        <button 
-                          type="button" 
-                          aria-label="Hiện bản dịch câu ví dụ" 
-                          aria-pressed={showExampleTranslation} 
-                          className={`quiz-action-btn ${showExampleTranslation ? 'active' : ''}`} 
-                          onClick={() => setShowExampleTranslation(prev => !prev)}
-                        >
-                          <LanguageIcon className="icon" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {showExampleTranslation && q.vocab.examples[0].vi && (
-                    <div className="quiz-feedback-translation">
-                      {q.vocab.examples[0].vi}
-                    </div>
-                  )}
-                </div>
-              )}
-              {hasSynonyms && (
-                <div className="quiz-feedback-row">
-                  <span className="quiz-feedback-label">Từ đồng nghĩa: </span>
-                  <span className="text-dotted">{q.vocab.synonyms.join('; ')}</span>
-                </div>
-              )}
-            </div>
-          )}
+  function renderResultBanner() {
+    if (!hasSubmittedCurrentQuestion) return null;
+    
+    // In fill mode, we have a custom incorrect banner
+    if (q.type === 'fill' && fillCorrect === false) {
+      return (
+        <div className="quiz-fill-feedback wrong">
+          <XMarkIcon className="icon" /> Sai rồi! Đáp án đúng: <strong>{q.correctAnswer}</strong>
         </div>
+      );
+    }
+    
+    if (isCurrentAnswerCorrect) {
+      return (
+        <div className="quiz-feedback-section">
+          <div className="quiz-feedback-status" style={{ color: '#15803d', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckIcon className="icon" style={{ width: 24, height: 24 }} /> 
+            <strong>Tuyệt vời! Chính xác.</strong>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
 
-        {(!activeSettings?.requireRetypeOnWrong || fillCorrect !== false || q.type !== 'fill') && (
-          <button className="quiz-continue-btn" onClick={handleNext}>
-            Tiếp tục
-          </button>
-        )}
+  function renderContinueAction() {
+    if (!shouldShowContinueButton) return null;
+    return (
+      <div className="quiz-continue-action-container">
+        <button className="quiz-continue-btn" onClick={handleNext}>
+          Tiếp tục
+        </button>
       </div>
-    )
+    );
   }
 
   function renderSettingsModal() {
@@ -1473,6 +1641,11 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
                   <input type="checkbox" checked={settings.autoNext}
                     onChange={() => setSettings(s => ({ ...s, autoNext: !s.autoNext }))} />
                   <span>⏩ Tự động chuyển câu khi đúng</span>
+                </label>
+                <label className={`quiz-setting-option ${settings.showImageInQuestion ? 'active' : ''}`} title="Hiển thị ảnh minh họa nếu từ vựng có ảnh">
+                  <input type="checkbox" checked={settings.showImageInQuestion}
+                    onChange={() => setSettings(s => ({ ...s, showImageInQuestion: !s.showImageInQuestion }))} />
+                  <span>🖼️ Hiển thị ảnh trong câu hỏi</span>
                 </label>
               </div>
 
@@ -1674,74 +1847,101 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
 
       {/* Quiz Card */}
       <div className="quiz-card">
-        {/* Question Header */}
-        <div className="quiz-question-header">
-          <div className="quiz-question-text">
-            {q.type === 'listen' ? (
-              <h2 className="quiz-word quiz-listen-word">
-                <SpeakerWaveIcon className="icon" style={{ width: 32, height: 32 }} />
-                {answered ? q.vocab.word : '🔊 ???'}
-              </h2>
-            ) : (
-              <h2 className="quiz-word">{q.questionText}</h2>
-            )}
-            {q.type !== 'listen' && q.vocab.type && (
-              <span className="quiz-word-meta">
-                {q.vocab.type}
-                {q.vocab.pronunciation && ` - ${q.vocab.pronunciation}`}
-              </span>
-            )}
-          </div>
-          <div className="quiz-question-actions">
-            {!answered && (
-              <button 
-                className={`quiz-action-icon ${hintUsed ? 'hint-active' : ''}`} 
-                onClick={() => {
-                  setHintUsed(true)
-                  setShowHintText(true)
-                }} 
-                title="Sử dụng gợi ý"
-              >
-                <LightBulbIcon className="icon" style={{ color: hintUsed ? '#EAB308' : undefined }} />
-              </button>
-            )}
-            {q.type !== 'listen' && (
-              <>
-                <button
-                  className={`quiz-action-icon ${autoPlayAudio ? 'active' : ''}`}
-                  onClick={toggleAutoPlayAudio}
-                  title={autoPlayAudio ? "Tắt tự động phát âm" : "Bật tự động phát âm"}
-                  aria-label={autoPlayAudio ? "Tắt tự động phát âm" : "Bật tự động phát âm"}
-                  aria-pressed={autoPlayAudio}
-                >
-                  <div style={{
-                    fontSize: '10px',
-                    fontWeight: 'bold',
-                    border: '1px solid currentColor',
-                    borderRadius: '4px',
-                    padding: '0 4px',
-                    lineHeight: '16px',
-                    opacity: autoPlayAudio ? 1 : 0.5,
-                    color: autoPlayAudio ? 'var(--accent)' : 'inherit'
-                  }}>
-                    AUTO
+        <div className={`quiz-question-top-layout ${settings.showImageInQuestion && q.vocab.imageUrl ? 'has-question-image' : 'without-question-image'} ${shouldShowDetailedFeedback ? 'showing-detailed-feedback' : ''}`}>
+          {settings.showImageInQuestion && q.vocab.imageUrl && (
+            <div className="quiz-question-image-col">
+              <QuizQuestionImage imageUrl={q.vocab.imageUrl} questionId={getVocabId(q.vocab)} />
+            </div>
+          )}
+          <div className="quiz-question-content-col">
+            <div className="quiz-question-main-area">
+              <div className="quiz-question-text">
+                {q.type === 'listen' ? (
+                  <h2 className="quiz-word quiz-listen-word">
+                    <SpeakerWaveIcon className="icon" style={{ width: 32, height: 32 }} />
+                    {!isTargetHidden ? q.vocab.word : '🔊 ???'}
+                  </h2>
+                ) : (
+                  <h2 className="quiz-word">
+                    {isTargetHidden ? '✏️ ___' : q.questionText}
+                  </h2>
+                )}
+                {q.type !== 'listen' && (q.vocab.type || q.vocab.pronunciation) && (
+                  <div className="quiz-word-meta" style={{ visibility: isTargetHidden ? 'hidden' : 'visible' }}>
+                    {q.vocab.type && <span>Loại từ: <strong>{q.vocab.type}</strong></span>}
+                    {q.vocab.type && q.vocab.pronunciation && <span className="quiz-word-meta-divider">|</span>}
+                    {q.vocab.pronunciation && <span>Phiên âm: <strong>{q.vocab.pronunciation}</strong></span>}
                   </div>
+                )}
+              </div>
+              
+              {shouldShowDetailedFeedback && (
+                <div className="quiz-feedback-inline-wrapper">
+                  <VocabularyFeedbackCard 
+                    vocab={q.vocab} 
+                    statusText={
+                      <div className="quiz-feedback-status-text">
+                        Đáp án đúng là: <strong>{q.direction === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}</strong>
+                      </div>
+                    }
+                    variant="inline"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="quiz-question-actions">
+              {!hasSubmittedCurrentQuestion && (
+                <button 
+                  className={`quiz-action-icon ${hintUsed ? 'hint-active' : ''}`} 
+                  onClick={() => {
+                    setHintUsed(true)
+                    setShowHintText(true)
+                  }} 
+                  title="Sử dụng gợi ý"
+                >
+                  <LightBulbIcon className="icon" style={{ color: hintUsed ? '#EAB308' : undefined }} />
                 </button>
-                <button className="quiz-action-icon" onClick={() => speak(q.vocab.word, { mode: 'manual', source: 'quiz-question', ownerId: 'quiz-session' })} title="Phát âm">
-                  <SpeakerWaveIcon className="icon" />
-                </button>
-              </>
-            )}
-            <button
-              className={`quiz-action-icon ${isStarred ? 'starred' : ''}`}
-              onClick={toggleStar}
-              title="Đánh dấu"
-            >
-              <StarIcon className="icon" />
-            </button>
-            <button className="quiz-action-icon" title="Chỉnh sửa" onClick={() => onEditWord(q.vocab)}>
-              <PencilSquareIcon className="icon" />
-            </button>
+              )}
+              {q.type !== 'listen' && (
+                <>
+                  <button
+                    className={`quiz-action-icon ${autoPlayAudio ? 'active' : ''}`}
+                    onClick={toggleAutoPlayAudio}
+                    title={autoPlayAudio ? "Tắt tự động phát âm" : "Bật tự động phát âm"}
+                    aria-label={autoPlayAudio ? "Tắt tự động phát âm" : "Bật tự động phát âm"}
+                    aria-pressed={autoPlayAudio}
+                  >
+                    <div className="quiz-auto-icon-badge" style={{
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      border: '1px solid currentColor',
+                      borderRadius: '4px',
+                      padding: '0 4px',
+                      lineHeight: '16px',
+                      opacity: autoPlayAudio ? 1 : 0.5,
+                      color: autoPlayAudio ? 'var(--accent)' : 'inherit'
+                    }}>
+                      AUTO
+                    </div>
+                  </button>
+                  <button className="quiz-action-icon" onClick={() => speak(q.vocab.word, { mode: 'manual', source: 'quiz-question', ownerId: 'quiz-session' })} title="Phát âm" aria-label="Phát âm">
+                    <SpeakerWaveIcon className="icon" />
+                  </button>
+                </>
+              )}
+              <button
+                className={`quiz-action-icon ${isStarred ? 'starred' : ''}`}
+                onClick={toggleStar}
+                title="Đánh dấu"
+                aria-label="Đánh dấu"
+              >
+                <StarIcon className="icon" />
+              </button>
+              <button className="quiz-action-icon" title="Chỉnh sửa" aria-label="Chỉnh sửa" onClick={() => onEditWord(q.vocab)}>
+                <PencilSquareIcon className="icon" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1764,8 +1964,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
         {/* Question Content */}
         {renderQuestion()}
 
-        {/* Feedback */}
-        {renderFeedback()}
+        {/* Unified Feedback & Continue Actions */}
+        {renderResultBanner()}
+        {renderContinueAction()}
       </div>
 
       {/* Bottom Stats */}

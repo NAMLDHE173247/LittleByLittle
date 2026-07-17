@@ -1,0 +1,252 @@
+/* ============================================
+   HelpTooltip — Rich info popup
+   Light / dark mode via quiz CSS variables
+   ============================================ */
+
+.ht-root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+/* ---- Trigger button ---- */
+.ht-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  outline: none;
+  color: var(--quiz-text-muted);
+  transition: color 0.15s, transform 0.15s;
+  line-height: 0;
+}
+
+.ht-trigger:hover,
+.ht-trigger:focus-visible {
+  color: var(--quiz-accent);
+  transform: scale(1.18);
+}
+
+.ht-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+/* ---- Popup ---- */
+.ht-popup {
+  position: absolute;
+  z-index: 10000;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 0;
+  background: var(--quiz-card-bg);
+  border: 1.5px solid var(--quiz-border);
+  border-radius: 14px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.08),
+    0 16px 40px -4px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--quiz-text-main);
+  font-weight: 450;
+  pointer-events: none;
+  white-space: normal;
+  overflow: hidden;
+
+  animation: ht-fade-in 0.16s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+html.dark .ht-popup,
+[data-theme='dark'] .ht-popup,
+.dark .ht-popup {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.35),
+    0 16px 40px -4px rgba(0, 0, 0, 0.5),
+    0 0 0 0.5px rgba(255,255,255,0.04);
+}
+
+/* ---- Placement ---- */
+.ht-popup--top {
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.ht-popup--bottom {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.ht-popup--left {
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+.ht-popup--right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ---- Arrow ---- */
+.ht-arrow {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--quiz-card-bg);
+  border: 1.5px solid var(--quiz-border);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+.ht-arrow--top    { bottom:-5px; left:50%; margin-left:-4px; border-top:none; border-left:none; }
+.ht-arrow--bottom { top:-5px;    left:50%; margin-left:-4px; border-bottom:none; border-right:none; }
+.ht-arrow--left   { right:-5px;  top:50%;  margin-top:-4px;  border-left:none; border-bottom:none; }
+.ht-arrow--right  { left:-5px;   top:50%;  margin-top:-4px;  border-right:none; border-top:none; }
+
+/* ---- Animation ---- */
+@keyframes ht-fade-in {
+  from { opacity:0; transform:translateX(-50%) translateY(5px); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+.ht-popup--left,
+.ht-popup--right {
+  animation-name: ht-fade-in-side;
+}
+@keyframes ht-fade-in-side {
+  from { opacity:0; }
+  to   { opacity:1; }
+}
+
+/* ============================================
+   Rich content helpers  (ht-body, ht-section…)
+   ============================================ */
+
+/* Header strip with accent gradient */
+.ht-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px 10px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--quiz-accent) 12%, transparent),
+    color-mix(in srgb, var(--quiz-accent) 6%, transparent));
+  border-bottom: 1px solid var(--quiz-border);
+}
+.ht-header-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.ht-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--quiz-accent);
+  letter-spacing: 0.01em;
+}
+
+/* Body */
+.ht-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Description paragraph */
+.ht-desc {
+  font-size: 12.5px;
+  color: var(--quiz-text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Section label */
+.ht-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--quiz-text-muted);
+  margin-bottom: 5px;
+}
+
+/* Option rows */
+.ht-options {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ht-opt {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12.5px;
+}
+.ht-opt-badge {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--quiz-accent);
+  background: var(--quiz-accent-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.ht-opt-text {
+  color: var(--quiz-text-main);
+  line-height: 1.5;
+}
+.ht-opt-text em {
+  font-style: normal;
+  color: var(--quiz-text-muted);
+}
+
+/* How-it-works block */
+.ht-how {
+  background: color-mix(in srgb, var(--quiz-accent) 6%, transparent);
+  border-left: 3px solid var(--quiz-accent);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--quiz-text-main);
+  line-height: 1.55;
+}
+.ht-how-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--quiz-accent);
+  margin-bottom: 3px;
+}
+
+/* Tip block */
+.ht-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: color-mix(in srgb, #f59e0b 8%, transparent);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--quiz-text-main);
+  line-height: 1.5;
+}
+.ht-tip-icon {
+  font-size: 13px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+/* Divider */
+.ht-divider {
+  height: 1px;
+  background: var(--quiz-border);
+  margin: 0;
+}

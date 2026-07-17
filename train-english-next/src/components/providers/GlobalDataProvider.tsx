@@ -237,10 +237,10 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     setEditingId(vocab._id);
     setFormData({
       word: vocab.word, type: vocab.type, pronunciation: vocab.pronunciation,
-      meanings: vocab.meanings.join(', '), partOfSpeech: vocab.partOfSpeech,
-      examples: vocab.examples.length > 0 ? vocab.examples : [{ en: '', vi: '' }],
-      topic: vocab.topic, level: vocab.level, synonyms: vocab.synonyms.join(', '),
-      antonyms: vocab.antonyms.join(', '), note: vocab.note, imageUrl: vocab.imageUrl || '',
+      meanings: vocab.meanings?.join(', ') || '', partOfSpeech: vocab.partOfSpeech,
+      examples: vocab.examples?.length > 0 ? vocab.examples : [{ en: '', vi: '' }],
+      topic: vocab.topic, level: vocab.level, synonyms: vocab.synonyms?.join(', ') || '',
+      antonyms: vocab.antonyms?.join(', ') || '', note: vocab.note, imageUrl: vocab.imageUrl || '',
       deckIds: vocab.deckIds ? vocab.deckIds.map((d: any) => typeof d === 'string' ? d : d?._id).filter(Boolean) : [],
     });
     setFormError('');

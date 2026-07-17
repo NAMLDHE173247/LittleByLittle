@@ -87,7 +87,7 @@ export default function DeckMasteryRoute() {
   const submitProgress = async (wordId: string, skill: string, isCorrect: boolean): Promise<boolean> => {
     try {
       const todayStr = new Date().toLocaleDateString("en-CA");
-      const updatePromise = fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/progress/review`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/progress/review`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -96,15 +96,6 @@ export default function DeckMasteryRoute() {
         body: JSON.stringify({ wordId, skill, correct: isCorrect, clientDateString: todayStr }),
       });
 
-      mutate(
-        async () => {
-          await updatePromise;
-          return undefined;
-        },
-        { revalidate: true },
-      );
-
-      const res = await updatePromise;
       const data = await res.json();
 
       if (data.success && data.data?.todayTotalReviews) {
@@ -117,6 +108,9 @@ export default function DeckMasteryRoute() {
           toast.success("Xuất sắc! Trạng thái siêu tập trung đã được kích hoạt!");
         }
       }
+      if (data.success) {
+        mutate(undefined, { revalidate: true });
+      }
       return !!data.success;
     } catch (error) {
       console.error("Failed to submit flashcard progress:", error);
@@ -128,41 +122,43 @@ export default function DeckMasteryRoute() {
     <div className="deck-mastery-page" style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
       {!isQuizActive && (
         <>
-          <button
-            onClick={() => router.push("/decks")}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "none",
-              border: "none",
-              color: "var(--text-secondary)",
-              cursor: "pointer",
-              marginBottom: "20px",
-              fontSize: "14px",
-              fontWeight: 500,
-            }}
-          >
-            <ArrowLeftIcon style={{ width: "16px", height: "16px" }} /> Quay lại bộ thẻ
-          </button>
-
           <div style={{ marginBottom: "24px" }}>
-            {loading ? (
-              <div
+            <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => router.push('/decks')}
                 style={{
-                  height: "32px",
-                  width: "200px",
-                  background: "var(--bg-card)",
-                  borderRadius: "4px",
-                  animation: "pulse 1.5s infinite",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: 500,
                 }}
-              />
-            ) : (
-              <h1 style={{ fontSize: "24px", fontWeight: "bold", margin: 0, color: "var(--text-primary)" }}>
-                Độ thông thạo:{" "}
-                <span style={{ color: deck?.color || "var(--primary-color)" }}>{deck?.name || "Bộ thẻ"}</span>
-              </h1>
-            )}
+              >
+                <ArrowLeftIcon style={{ width: "16px", height: "16px" }} /> Quay lại bộ thẻ
+              </button>
+
+              {loading ? (
+                <div
+                  style={{
+                    height: "32px",
+                    width: "200px",
+                    background: "var(--bg-card)",
+                    borderRadius: "4px",
+                    animation: "pulse 1.5s infinite",
+                  }}
+                />
+              ) : (
+                <h1 style={{ fontSize: "24px", fontWeight: "bold", margin: 0, color: "var(--text-primary)" }}>
+                  Độ thông thạo:{" "}
+                  <span style={{ color: deck?.color || "var(--primary-color)" }}>{deck?.name || "Bộ thẻ"}</span>
+                </h1>
+              )}
+            </div>
             {deck?.description && (
               <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: "15px" }}>{deck.description}</p>
             )}
