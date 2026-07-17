@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const authUser = verifyAuth(req);
     if (!authUser) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
 
-    const metadata = await VocabularyService.getMetadata();
+    const metadata = await VocabularyService.getMetadata(authUser.id);
     return NextResponse.json({ success: true, data: metadata });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: "Server error", error: error.message }, { status: 500 });

@@ -1,6 +1,7 @@
-import { Vocabulary, Deck } from "../db/models";
+import { Vocabulary, Deck, UserWordProgress } from "../db/models";
 import dbConnect from "../db/connection";
 import mongoose, { SortOrder } from "mongoose";
+import { normalizeVocabularyWord } from "../utils/vocabularyUtils";
 
 type VocabularyQueryArgs = Partial<Record<"page" | "limit" | "search" | "type" | "level" | "topic" | "pos" | "deck" | "sortBy" | "sortDir", string>>;
 
@@ -27,7 +28,7 @@ export class VocabularyService {
     return Math.min(this.MAX_PAGE_SIZE, Math.max(1, Math.floor(limit)));
   }
 
-  private static buildQuery(queryArgs: VocabularyQueryArgs) {
+  private static buildQuery(queryArgs: VocabularyQueryArgs, userId: string) {
     const {
       search = "",
       type = "",
@@ -37,7 +38,7 @@ export class VocabularyService {
       deck = "",
     } = queryArgs;
 
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = { userId }; // Lọc theo user
     const normalizedSearch = String(search || "").trim().slice(0, this.MAX_SEARCH_LENGTH);
 
     if (normalizedSearch) {
@@ -62,14 +63,43 @@ export class VocabularyService {
     return { [field]: direction, _id: direction };
   }
 
-  static async getMetadata() {
+  private static async verifyDeckIds(deckIds: string[], userId: string): Promise<string[]> {
+    if (!deckIds || deckIds.length === 0) return [];
+    
+    // Deduplicate and filter out invalid ObjectIds
+    const uniqueDeckIds = [...new Set(deckIds.map(String))].filter(id => mongoose.Types.ObjectId.isValid(id));
+    
+    if (uniqueDeckIds.length === 0 && deckIds.length > 0) {
+      throw new Error("ID bộ thẻ không hợp lệ");
+    }
+
+    if (uniqueDeckIds.length > 0) {
+      const ownedDecksCount = await Deck.countDocuments({
+        _id: { $in: uniqueDeckIds },
+        userId
+      });
+      if (ownedDecksCount !== uniqueDeckIds.length) {
+        throw new Error("Một hoặc nhiều bộ thẻ không tồn tại hoặc không thuộc quyền sở hữu của bạn");
+      }
+    }
+    return uniqueDeckIds;
+  }
+
+  private static handleDuplicateError(error: any) {
+    if (error.code === 11000) {
+      throw new Error("Từ này đã tồn tại trong kho từ vựng của bạn.");
+    }
+    throw error;
+  }
+
+  static async getMetadata(userId: string) {
     await dbConnect();
     const [totalWords, totalPhrases, uniqueTopics, uniqueLevels, uniquePartsOfSpeech] = await Promise.all([
-      Vocabulary.countDocuments({ type: "word" }),
-      Vocabulary.countDocuments({ type: "phrase" }),
-      Vocabulary.distinct("topic"),
-      Vocabulary.distinct("level"),
-      Vocabulary.distinct("partOfSpeech"),
+      Vocabulary.countDocuments({ type: "word", userId }),
+      Vocabulary.countDocuments({ type: "phrase", userId }),
+      Vocabulary.distinct("topic", { userId }),
+      Vocabulary.distinct("level", { userId }),
+      Vocabulary.distinct("partOfSpeech", { userId }),
     ]);
     const total = totalWords + totalPhrases;
 
@@ -83,14 +113,14 @@ export class VocabularyService {
     };
   }
 
-  static async getPaginated(queryArgs: VocabularyQueryArgs) {
+  static async getPaginated(queryArgs: VocabularyQueryArgs, userId: string) {
     await dbConnect();
     const {
       page = "1", limit = "10",
       sortBy = "word", sortDir = "asc",
     } = queryArgs;
 
-    const query = this.buildQuery(queryArgs);
+    const query = this.buildQuery(queryArgs, userId);
     const sortOptions = this.buildSort(sortBy, sortDir);
     const limitNum = this.normalizeLimit(limit);
     const pageNum = this.normalizePage(page);
@@ -117,9 +147,9 @@ export class VocabularyService {
     };
   }
 
-  static async getExportData(queryArgs: VocabularyQueryArgs = {}) {
+  static async getExportData(queryArgs: VocabularyQueryArgs = {}, userId: string) {
     await dbConnect();
-    const query = this.buildQuery(queryArgs);
+    const query = this.buildQuery(queryArgs, userId);
     const sortOptions = this.buildSort("word", "asc");
 
     return Vocabulary.find(query)
@@ -128,69 +158,128 @@ export class VocabularyService {
       .lean();
   }
 
-  static async create(data: any) {
+  static async create(data: any, userId: string) {
     await dbConnect();
-    const vocabulary = await Vocabulary.create(data);
-    return vocabulary;
+    
+    const validDeckIds = await this.verifyDeckIds(data.deckIds, userId);
+    
+    try {
+      const vocabulary = await Vocabulary.create({
+        ...data,
+        userId,
+        normalizedWord: normalizeVocabularyWord(data.word),
+        deckIds: validDeckIds
+      });
+      return vocabulary;
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
   }
 
-  static async update(id: string, data: any) {
+  static async update(id: string, data: any, userId: string) {
     await dbConnect();
-    const vocabulary = await Vocabulary.findByIdAndUpdate(id, data, { new: true, runValidators: true });
-    if (!vocabulary) throw new Error("Vocabulary not found");
-    return vocabulary;
+    
+    if (data.deckIds) {
+      data.deckIds = await this.verifyDeckIds(data.deckIds, userId);
+    }
+
+    if (data.word) {
+      data.normalizedWord = normalizeVocabularyWord(data.word);
+    }
+
+    try {
+      const vocabulary = await Vocabulary.findOneAndUpdate(
+        { _id: id, userId },
+        data,
+        { new: true, runValidators: true }
+      );
+      if (!vocabulary) throw new Error("Vocabulary not found");
+      return vocabulary;
+    } catch (error) {
+      this.handleDuplicateError(error);
+    }
   }
 
-  static async deleteOne(id: string) {
+  static async deleteOne(id: string, userId: string) {
     await dbConnect();
-    const vocabulary = await Vocabulary.findByIdAndDelete(id);
-    if (!vocabulary) throw new Error("Vocabulary not found");
-    return vocabulary;
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const vocabulary = await Vocabulary.findOneAndDelete({ _id: id, userId }, { session });
+      if (!vocabulary) throw new Error("Vocabulary not found");
+      
+      // Cascade delete progress
+      await UserWordProgress.deleteMany({ wordId: vocabulary._id }, { session });
+      
+      await session.commitTransaction();
+      return vocabulary;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
-  static async deleteMany(ids: string[]) {
+  static async deleteMany(ids: string[], userId: string) {
     await dbConnect();
     if (!ids || !ids.length) throw new Error("No IDs provided");
-    const result = await Vocabulary.deleteMany({ _id: { $in: ids } });
-    return result.deletedCount;
+
+    const validVocabs = await Vocabulary.find({ _id: { $in: ids }, userId }).select('_id');
+    const validIds = validVocabs.map(v => v._id);
+
+    if (validIds.length > 0) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      try {
+        await UserWordProgress.deleteMany({ wordId: { $in: validIds } }, { session });
+        const result = await Vocabulary.deleteMany({ _id: { $in: validIds }, userId }, { session });
+        await session.commitTransaction();
+        return result.deletedCount;
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        await session.endSession();
+      }
+    }
+    return 0;
   }
 
-  static async deleteAll() {
+  static async deleteAll(userId: string) {
     await dbConnect();
-    const result = await Vocabulary.deleteMany({});
-    return result.deletedCount;
+    
+    const allVocabs = await Vocabulary.find({ userId }).select('_id');
+    const validIds = allVocabs.map(v => v._id);
+    
+    if (validIds.length > 0) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      try {
+        await UserWordProgress.deleteMany({ wordId: { $in: validIds } }, { session });
+        const result = await Vocabulary.deleteMany({ userId }, { session });
+        await session.commitTransaction();
+        return result.deletedCount;
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        await session.endSession();
+      }
+    }
+    return 0;
   }
 
-  static async bulkImport(words: any[], deckIds: string[] = [], authUserId: string) {
+  static async bulkImport(words: any[], requestDeckIds: string[] = [], userId: string) {
     await dbConnect();
     if (!words || words.length === 0) throw new Error("Mảng từ vựng rỗng");
     if (words.length > 200) throw new Error("Tối đa 200 từ vựng mỗi lần import");
 
     // 1. Validate Deck IDs
-    if (deckIds.length > 50) throw new Error("Tối đa 50 bộ thẻ mỗi lần import");
-    
-    // Validate ObjectId and deduplicate
-    const uniqueDeckIds = [...new Set(deckIds)];
-    const validDeckIds: string[] = [];
-    for (const id of uniqueDeckIds) {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        throw new Error(`ID bộ thẻ không hợp lệ: ${id}`);
-      }
-      validDeckIds.push(id);
-    }
+    if (requestDeckIds.length > 50) throw new Error("Tối đa 50 bộ thẻ mỗi lần import");
+    const validDeckIds = await this.verifyDeckIds(requestDeckIds, userId);
 
-    // Verify ownership
-    if (validDeckIds.length > 0) {
-      const ownedDecksCount = await Deck.countDocuments({
-        _id: { $in: validDeckIds },
-        userId: authUserId
-      });
-      if (ownedDecksCount !== validDeckIds.length) {
-        throw new Error("Một hoặc nhiều bộ thẻ không tồn tại hoặc không thuộc quyền sở hữu của bạn");
-      }
-    }
-
-    // 2. Prepare and Deduplicate request words
+    // 2. Prepare and Deduplicate request words (In-memory Deduplication)
     const errors: string[] = [];
     const validWords: any[] = [];
     let duplicateInRequestCount = 0;
@@ -214,15 +303,17 @@ export class VocabularyService {
         }
       }
 
-      const wordLower = item.word.trim().toLowerCase();
+      const normalizedWord = normalizeVocabularyWord(item.word);
       
       // Deduplicate inside request JSON
-      if (seenInRequest.has(wordLower)) {
+      if (seenInRequest.has(normalizedWord)) {
         duplicateInRequestCount++;
         continue;
       }
 
       const sanitized = {
+        userId,
+        normalizedWord,
         word: item.word.trim(),
         type: ['word', 'phrase'].includes(item.type) ? item.type : 'word',
         pronunciation: item.pronunciation?.trim?.() || '',
@@ -241,27 +332,22 @@ export class VocabularyService {
           return url.toLowerCase() === 'invalid' ? '' : url;
         })(),
         audioUrl: item.audioUrl?.trim?.() || '',
-        deckIds: validDeckIds, // Assign verified deckIds
+        deckIds: validDeckIds,
       };
 
       validWords.push(sanitized);
-      seenInRequest.add(wordLower);
+      seenInRequest.add(normalizedWord);
     }
 
     // 3. Find existing words in DB
-    const existingWordTexts = validWords.map((w: any) => w.word.toLowerCase());
-    let existingMap = new Map<string, string>();
-    
-    if (existingWordTexts.length > 0) {
-      // Create a regex to match all words case-insensitively
-      const regexPattern = `^(${existingWordTexts.map((w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`;
-      const existingDocs = await Vocabulary.find({
-        word: { $regex: new RegExp(regexPattern, 'i') }
-      }).select('_id word');
+    const existingDocs = await Vocabulary.find({
+      userId,
+      normalizedWord: { $in: Array.from(seenInRequest) }
+    }).select('_id normalizedWord');
 
-      for (const doc of existingDocs) {
-        existingMap.set(doc.word.toLowerCase(), doc._id.toString());
-      }
+    const existingMap = new Map<string, string>();
+    for (const doc of existingDocs) {
+      existingMap.set(doc.normalizedWord, doc._id.toString());
     }
 
     // 4. Split into new and existing
@@ -269,9 +355,8 @@ export class VocabularyService {
     const existingDocsIds: string[] = [];
 
     for (const w of validWords) {
-      const wLower = w.word.toLowerCase();
-      if (existingMap.has(wLower)) {
-        existingDocsIds.push(existingMap.get(wLower)!);
+      if (existingMap.has(w.normalizedWord)) {
+        existingDocsIds.push(existingMap.get(w.normalizedWord)!);
       } else {
         newWordsToInsert.push(w);
       }
@@ -279,15 +364,27 @@ export class VocabularyService {
 
     // 5. Execute DB operations
     let createdCount = 0;
+    let failedCount = 0;
+
     if (newWordsToInsert.length > 0) {
-      const result = await Vocabulary.insertMany(newWordsToInsert, { ordered: false });
-      createdCount = result.length;
+      try {
+        const result = await Vocabulary.insertMany(newWordsToInsert, { ordered: false });
+        createdCount = result.length;
+      } catch (err: any) {
+        // If ordered: false is used, MongoDB throws a BulkWriteError containing insertedDocs
+        if (err.insertedDocs) {
+          createdCount = err.insertedDocs.length;
+          failedCount = newWordsToInsert.length - createdCount;
+        } else {
+          throw err;
+        }
+      }
     }
 
     let updatedVocabularyCount = 0;
     if (existingDocsIds.length > 0 && validDeckIds.length > 0) {
       const result = await Vocabulary.updateMany(
-        { _id: { $in: existingDocsIds } },
+        { _id: { $in: existingDocsIds }, userId },
         { $addToSet: { deckIds: { $each: validDeckIds } } }
       );
       updatedVocabularyCount = result.modifiedCount;
@@ -295,6 +392,7 @@ export class VocabularyService {
 
     return {
       createdCount,
+      failedCount,
       existingCount: existingDocsIds.length,
       duplicateInRequestCount,
       invalidCount,

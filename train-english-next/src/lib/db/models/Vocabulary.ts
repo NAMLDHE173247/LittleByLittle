@@ -5,11 +5,21 @@ export interface IVocabularyDocument extends Omit<IVocabulary, "_id">, Document 
 
 const VocabularySchema = new Schema<IVocabularyDocument>(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "User ID is required"],
+      index: true,
+    },
     word: {
       type: String,
       required: [true, "Word/phrase is required"],
       trim: true,
       index: true,
+    },
+    normalizedWord: {
+      type: String,
+      required: true,
     },
     type: {
       type: String,
@@ -79,6 +89,9 @@ const VocabularySchema = new Schema<IVocabularyDocument>(
   }
 );
 
+VocabularySchema.index({ userId: 1, normalizedWord: 1 }, { unique: true });
+VocabularySchema.index({ userId: 1, topic: 1 });
+VocabularySchema.index({ userId: 1, level: 1 });
 VocabularySchema.index({ word: "text", meanings: "text", topic: "text" });
 
 export default mongoose.models.Vocabulary || mongoose.model<IVocabularyDocument>("Vocabulary", VocabularySchema);

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const queryArgs = Object.fromEntries(searchParams.entries());
-    const data = await VocabularyService.getExportData(queryArgs);
+    const data = await VocabularyService.getExportData(queryArgs, authUser.id);
 
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {

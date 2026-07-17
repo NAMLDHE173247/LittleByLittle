@@ -1,5 +1,6 @@
 import { Deck, Vocabulary } from "../db/models";
 import dbConnect from "../db/connection";
+import mongoose from "mongoose";
 
 export class DeckService {
   static async getAll(userId: string) {
@@ -7,7 +8,7 @@ export class DeckService {
     const decks = await Deck.find({ userId }).sort({ createdAt: -1 }).lean();
     
     const counts = await Vocabulary.aggregate([
-      { $match: { deckIds: { $exists: true, $not: { $size: 0 } } } },
+      { $match: { userId: new mongoose.Types.ObjectId(userId), deckIds: { $exists: true, $not: { $size: 0 } } } },
       { $unwind: "$deckIds" },
       { $group: { _id: "$deckIds", count: { $sum: 1 } } }
     ]);

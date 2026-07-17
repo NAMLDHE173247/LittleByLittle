@@ -5,7 +5,7 @@ import { verifyAuth } from "@/lib/utils/auth";
 export async function POST(req: NextRequest) {
   try {
     const authUser = verifyAuth(req);
-    if (!authUser || authUser.role !== "admin") return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    if (!authUser) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     let words = [];

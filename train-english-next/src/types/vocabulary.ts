@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 export interface IVocabulary {
   _id: string | mongoose.Types.ObjectId;
+  userId: string | mongoose.Types.ObjectId;
+  normalizedWord: string;
   word: string;
   type: "word" | "phrase";
   pronunciation: string;

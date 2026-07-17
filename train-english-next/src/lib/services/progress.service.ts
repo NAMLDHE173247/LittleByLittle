@@ -34,7 +34,7 @@ export const getStats = async (userId: string) => {
   await dbConnect();
   try {
     const [totalWords, progresses] = await Promise.all([
-      Vocabulary.countDocuments(),
+      Vocabulary.countDocuments({ userId }),
       UserWordProgress.find({ userId }).lean(),
     ]);
 
@@ -201,6 +201,7 @@ export const getDue = async (payload: { skill?: string; limit?: number }, userId
     const progressWordIds = wordsWithProgress.map((p) => p.wordId.toString());
 
     const newWords = await Vocabulary.find({
+      userId,
       _id: { $nin: progressWordIds },
     })
       .limit(Math.max(0, limit - dueWords.length))
@@ -258,7 +259,7 @@ export const getPracticeWords = async (payload: { count?: number; mode?: string;
     const deckId = payload.deckId as string;
 
     // 1. Filter Vocabulary
-    const vocabQuery: any = {};
+    const vocabQuery: any = { userId };
     if (deckId) {
       vocabQuery.deckIds = deckId;
     }
@@ -369,7 +370,7 @@ export const getPracticeAvailability = async (payload: { deckId?: string }, user
   try {
     const deckId = payload.deckId as string;
 
-    const vocabQuery: any = {};
+    const vocabQuery: any = { userId };
     if (deckId) vocabQuery.deckIds = deckId;
     const allVocabs = await Vocabulary.find(vocabQuery).lean();
 
@@ -620,7 +621,7 @@ export const seedDemo = async (userId: string) => {
   await dbConnect();
   try {
     // const userId = userId;
-    const vocabularies = await Vocabulary.find().limit(50);
+    const vocabularies = await Vocabulary.find({ userId }).limit(50);
     if (vocabularies.length === 0) {
       throw new Error(JSON.stringify({
         success: false,
@@ -743,7 +744,7 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
     if (deckId) {
       searchFilter.deckIds = new mongoose.Types.ObjectId(deckId);
     }
-    
+    searchFilter.userId = userId;
     const allVocabs = await Vocabulary.find(searchFilter)
       .select("word pronunciation meanings imageUrl level type partOfSpeech topic")
       .lean();
