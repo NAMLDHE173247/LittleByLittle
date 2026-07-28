@@ -502,8 +502,6 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     resetQuestionUi()
     setCorrectCount(0)
     setTotalAnswered(0)
-    setCorrectCount(0)
-    setTotalAnswered(0)
     setWrongAnswers([])
     setShowReview(false)
     spokenQuestionIdx.current = -1
@@ -540,6 +538,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
       sourceScope: practiceSettings.sourceScope,
       sourceOrder: practiceSettings.sourceOrder,
       combineStrategy: practiceSettings.combineStrategy || 'smart',
+      ensureAllCandidatesOnce: true,
     })
     
     const first = selectNextQuestion(session)
@@ -1641,28 +1640,29 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
 
           {(() => {
             const isPracticeMode = sessionMode === 'wrong-practice'
-            const hasGroupAChanged = started && activeSettings && (
+            const hasRestartRequiredChanges = started && activeSettings && (
               settings.mode !== activeSettings.mode ||
               (!isPracticeMode && settings.questionCount !== activeSettings.questionCount) ||
               (!isPracticeMode && settings.shuffle !== activeSettings.shuffle) ||
-              (!isPracticeMode && settings.filterDeck !== activeSettings.filterDeck) ||
-              (!isPracticeMode && settings.filterLevel !== activeSettings.filterLevel) ||
-              (!isPracticeMode && settings.filterTopic !== activeSettings.filterTopic) ||
-              (!isPracticeMode && settings.filterPOS !== activeSettings.filterPOS) ||
-              (!isPracticeMode && settings.filterTier !== activeSettings.filterTier) ||
-              (!isPracticeMode && settings.sourceMode !== activeSettings.sourceMode) ||
+              settings.filterDeck !== activeSettings.filterDeck ||
+              settings.filterLevel !== activeSettings.filterLevel ||
+              settings.filterTopic !== activeSettings.filterTopic ||
+              settings.filterPOS !== activeSettings.filterPOS ||
+              settings.filterTier !== activeSettings.filterTier ||
+              settings.sourceMode !== activeSettings.sourceMode ||
               settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
               settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
               JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
             )
+
             const hasGroupBChanged = started && activeSettings && (
               settings.autoNext !== activeSettings.autoNext
             )
 
-            if (started && (hasGroupAChanged || hasGroupBChanged)) {
+            if (started && (hasRestartRequiredChanges || hasGroupBChanged)) {
               return (
-                <div className="quiz-settings-notice" style={{ padding: '12px 24px', backgroundColor: hasGroupAChanged ? '#FEF9C3' : '#DCFCE7', color: hasGroupAChanged ? '#854D0E' : '#166534', fontSize: '14px', borderBottom: hasGroupAChanged ? '1px solid #FEF08A' : '1px solid #BBF7D0' }}>
-                  {hasGroupAChanged ? (
+                <div className="quiz-settings-notice" style={{ padding: '12px 24px', backgroundColor: hasRestartRequiredChanges ? '#FEF9C3' : '#DCFCE7', color: hasRestartRequiredChanges ? '#854D0E' : '#166534', fontSize: '14px', borderBottom: hasRestartRequiredChanges ? '1px solid #FEF08A' : '1px solid #BBF7D0' }}>
+                  {hasRestartRequiredChanges ? (
                     <>⚠ Thay đổi này sẽ áp dụng khi bạn bắt đầu lượt Quiz mới.</>
                   ) : (
                     <>✓ Đã áp dụng cho phiên hiện tại.</>
