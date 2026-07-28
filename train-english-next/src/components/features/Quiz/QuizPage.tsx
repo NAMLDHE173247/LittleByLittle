@@ -1628,6 +1628,31 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
 
   function renderSettingsModal() {
     if (!showSettings) return null
+
+    const isPracticeMode = sessionMode === 'wrong-practice'
+    const hasRestartRequiredChanges = Boolean(
+      started && activeSettings && (
+        settings.mode !== activeSettings.mode ||
+        (!isPracticeMode && settings.questionCount !== activeSettings.questionCount) ||
+        (!isPracticeMode && settings.shuffle !== activeSettings.shuffle) ||
+        settings.filterDeck !== activeSettings.filterDeck ||
+        settings.filterLevel !== activeSettings.filterLevel ||
+        settings.filterTopic !== activeSettings.filterTopic ||
+        settings.filterPOS !== activeSettings.filterPOS ||
+        settings.filterTier !== activeSettings.filterTier ||
+        settings.sourceMode !== activeSettings.sourceMode ||
+        settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
+        settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
+        JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
+      )
+    )
+
+    const hasGroupBChanged = Boolean(
+      started && activeSettings && (
+        settings.autoNext !== activeSettings.autoNext
+      )
+    )
+
     return (
       <div className="modal-overlay" onClick={() => setShowSettings(false)}>
         <div className="modal quiz-settings-modal" onClick={e => e.stopPropagation()}>
@@ -1639,26 +1664,6 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
           </div>
 
           {(() => {
-            const isPracticeMode = sessionMode === 'wrong-practice'
-            const hasRestartRequiredChanges = started && activeSettings && (
-              settings.mode !== activeSettings.mode ||
-              (!isPracticeMode && settings.questionCount !== activeSettings.questionCount) ||
-              (!isPracticeMode && settings.shuffle !== activeSettings.shuffle) ||
-              settings.filterDeck !== activeSettings.filterDeck ||
-              settings.filterLevel !== activeSettings.filterLevel ||
-              settings.filterTopic !== activeSettings.filterTopic ||
-              settings.filterPOS !== activeSettings.filterPOS ||
-              settings.filterTier !== activeSettings.filterTier ||
-              settings.sourceMode !== activeSettings.sourceMode ||
-              settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
-              settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
-              JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
-            )
-
-            const hasGroupBChanged = started && activeSettings && (
-              settings.autoNext !== activeSettings.autoNext
-            )
-
             if (started && (hasRestartRequiredChanges || hasGroupBChanged)) {
               return (
                 <div className="quiz-settings-notice" style={{ padding: '12px 24px', backgroundColor: hasRestartRequiredChanges ? '#FEF9C3' : '#DCFCE7', color: hasRestartRequiredChanges ? '#854D0E' : '#166534', fontSize: '14px', borderBottom: hasRestartRequiredChanges ? '1px solid #FEF08A' : '1px solid #BBF7D0' }}>
@@ -1870,33 +1875,14 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
               <ArrowPathIcon className="icon icon-inline" /> Đặt lại mặc định
             </button>
             <div style={{ display: 'flex', gap: '8px' }}>
-              {(() => {
-                const hasGroupAChanged = started && activeSettings && (
-                  settings.mode !== activeSettings.mode ||
-                  settings.questionCount !== activeSettings.questionCount ||
-                  settings.shuffle !== activeSettings.shuffle ||
-                  settings.filterDeck !== activeSettings.filterDeck ||
-                  settings.filterLevel !== activeSettings.filterLevel ||
-                  settings.filterTopic !== activeSettings.filterTopic ||
-                  settings.filterPOS !== activeSettings.filterPOS ||
-                  settings.filterTier !== activeSettings.filterTier ||
-                  settings.sourceMode !== activeSettings.sourceMode ||
-                  settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
-                  settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
-                  JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
-                )
-                if (hasGroupAChanged) {
-                  return (
-                    <button className="btn-outline" onClick={() => {
-                      setShowSettings(false)
-                      startQuiz()
-                    }}>
-                      Bắt đầu lại Quiz với cài đặt mới
-                    </button>
-                  )
-                }
-                return null
-              })()}
+              {hasRestartRequiredChanges && (
+                <button className="btn-outline" onClick={() => {
+                  setShowSettings(false)
+                  startQuiz()
+                }}>
+                  Bắt đầu lại Quiz với cài đặt mới
+                </button>
+              )}
               <button className="btn-primary" onClick={() => setShowSettings(false)}>
                 Đóng
               </button>
