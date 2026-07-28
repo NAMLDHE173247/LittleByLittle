@@ -580,6 +580,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   // ---- Don't Know Handler ----
   const handleDontKnow = () => {
     if (answered) return
+    setFillInput('')
     setSelected(-1)
     setAnswered(true)
     setTotalAnswered(prev => prev + 1)
@@ -612,7 +613,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     if (answered && activeSettings?.requireRetypeOnWrong && fillCorrect === false) {
       if (isCorrect) {
         setFillNearMissMsg('')
-        handleNext()
+        setFillCorrect(true)
+        speak(q.vocab.word, { mode: 'manual', source: 'quiz-answer-feedback', ownerId: 'quiz-session' })
+        
+        if (activeSettings?.autoNext) {
+          autoNextTimer.current = setTimeout(handleNext, 1200)
+        }
       }
       return
     }
@@ -1422,13 +1428,13 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
             </div>
           )}
           {!answered && (
-            <button className="quiz-fill-submit" onClick={handleFillSubmit} disabled={!fillInput.trim()}>
+            <button type="button" className="quiz-fill-submit" onClick={handleFillSubmit} disabled={!fillInput.trim()}>
               Kiểm tra
             </button>
           )}
         </div>
         {!answered && (
-          <button className="quiz-dont-know" onClick={handleDontKnow} style={{ marginTop: 12 }}>
+          <button type="button" className="quiz-dont-know" onClick={handleDontKnow} style={{ marginTop: 12 }}>
             Hiển thị đáp án
           </button>
         )}
@@ -1529,7 +1535,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
           <XMarkIcon className="icon" style={{ width: 24, height: 24, marginTop: '2px', flexShrink: 0 }} /> 
           <div>
             <div style={{ fontWeight: 600, marginBottom: '4px' }}>{message}</div>
-            <div style={{ fontSize: '15px' }}>Đáp án đúng: <strong>{q.correctAnswer}</strong></div>
+            {!shouldShowDetailedFeedback && (
+              <div style={{ fontSize: '15px' }}>Đáp án đúng: <strong>{q.correctAnswer}</strong></div>
+            )}
           </div>
         </div>
       </div>

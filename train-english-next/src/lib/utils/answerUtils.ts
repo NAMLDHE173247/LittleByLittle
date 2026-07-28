@@ -31,13 +31,32 @@ export function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
+export function expandValidAnswers(validAnswers: string[]): string[] {
+  const expanded = new Set<string>()
+  for (const ans of validAnswers) {
+    expanded.add(ans) // Keep the original
+    const parts = ans.split(/[,;\/]/)
+    if (parts.length > 1) {
+      for (const part of parts) {
+        const trimmed = part.trim()
+        if (trimmed) expanded.add(trimmed)
+      }
+    }
+  }
+  return Array.from(expanded)
+}
+
 export function checkAnswer(input: string, validAnswers: string[]): {
   isCorrect: boolean
   isNearMiss: boolean
   nearMissTarget?: string
 } {
-  const normInput = normalizeForComparison(input)
-  const normValidAnswers = validAnswers.map(normalizeForComparison)
+  const expandedAnswers = expandValidAnswers(validAnswers)
+  
+  const cleanInput = input.replace(/[.,;!?]+$/, '')
+  const normInput = normalizeForComparison(cleanInput)
+  
+  const normValidAnswers = expandedAnswers.map(a => normalizeForComparison(a.replace(/[.,;!?]+$/, '')))
 
   if (normValidAnswers.includes(normInput)) {
     return { isCorrect: true, isNearMiss: false }
