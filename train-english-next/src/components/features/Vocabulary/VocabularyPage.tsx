@@ -6,6 +6,7 @@ import {
   ChevronDownIcon, CodeBracketIcon
 } from '@heroicons/react/24/outline'
 import { BookOpenIcon as BookOpenSolidIcon } from '@heroicons/react/24/solid'
+import { useVocabularyExport } from '@/hooks/useVocabularyExport';
 
 export interface VocabularyPageProps {
   data: {
@@ -53,7 +54,7 @@ export default function VocabularyPage({
   const { selectedRows, isSelectionMode, setIsSelectionMode, toggleSelectAll, toggleSelectRow, setSelectedRows } = selection;
   const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders } = actions;
 
-  const [exporting, setExporting] = useState(false);
+  const { exportVocabularies, exporting, error: exportError, setError: setExportError } = useVocabularyExport();
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -70,149 +71,26 @@ export default function VocabularyPage({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [exportMenuOpen]);
 
-  const fetchAllVocabs = async (): Promise<any[] | null> => {
-    const params = new URLSearchParams({
-      search: searchQuery,
-      type: filterCategory,
-      level: filterLevel,
-      topic: filterTopic,
-      pos: filterPartOfSpeech,
-      deck: filterDeck,
+  useEffect(() => {
+    if (exportError) {
+      alert(exportError);
+      setExportError('');
+    }
+  }, [exportError, setExportError]);
+
+  const handleExport = (format: 'json' | 'txt' | 'csv') => {
+    setExportMenuOpen(false);
+    exportVocabularies({
+      format,
+      query: {
+        search: searchQuery,
+        type: filterCategory,
+        level: filterLevel,
+        topic: filterTopic,
+        pos: filterPartOfSpeech,
+        deck: filterDeck,
+      }
     });
-    const res = await fetch(`/api/vocabulary/export?${params}`, { headers: authHeaders() });
-    const json = await res.json();
-    if (!json.success || !json.data) {
-      alert('Không thể tải dữ liệu từ vựng!');
-      return null;
-    }
-    return json.data;
-  };
-
-  const downloadFile = (content: string, filename: string, mime: string) => {
-    const blob = new Blob(['\uFEFF' + content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Export định dạng JSON đúng chuẩn import lại được (kèm imageUrl, trống = "invalid")
-  const exportToJson = async () => {
-    setExporting(true);
-    setExportMenuOpen(false);
-    try {
-      const allVocabs = await fetchAllVocabs();
-      if (!allVocabs) return;
-
-      const payload = allVocabs.map((v: any) => ({
-        word: v.word || '',
-        type: v.type || 'word',
-        pronunciation: v.pronunciation || '',
-        meanings: Array.isArray(v.meanings) ? v.meanings : [],
-        partOfSpeech: v.partOfSpeech || '',
-        examples: Array.isArray(v.examples)
-          ? v.examples.map((ex: any) => ({ en: ex.en || '', vi: ex.vi || '' }))
-          : [],
-        topic: v.topic || '',
-        level: v.level || '',
-        synonyms: Array.isArray(v.synonyms) ? v.synonyms : [],
-        antonyms: Array.isArray(v.antonyms) ? v.antonyms : [],
-        note: v.note || '',
-        imageUrl: (v.imageUrl && v.imageUrl.trim()) ? v.imageUrl.trim() : 'invalid',
-      }));
-
-      downloadFile(
-        JSON.stringify(payload, null, 2),
-        `tu-vung-littlebylittle-${new Date().toISOString().split('T')[0]}.json`,
-        'application/json;charset=utf-8'
-      );
-    } catch (err) {
-      alert('Lỗi khi xuất dữ liệu!');
-      console.error(err);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const exportToTxt = async () => {
-    setExporting(true);
-    setExportMenuOpen(false);
-    try {
-      const allVocabs = await fetchAllVocabs();
-      if (!allVocabs) return;
-
-      const now = new Date().toLocaleString('vi-VN');
-      const separator = '═'.repeat(60);
-      const thinSep = '─'.repeat(60);
-
-      let txt = '';
-      txt += `${separator}\n`;
-      txt += `  📚 DANH SÁCH TỪ VỰNG - LittleByLittle\n`;
-      txt += `  Xuất lúc: ${now}\n`;
-      txt += `  Tổng: ${allVocabs.length} từ\n`;
-      txt += `${separator}\n\n`;
-
-      allVocabs.forEach((v: any, idx: number) => {
-        txt += `${thinSep}\n`;
-        txt += `  ${idx + 1}. ${v.word}`;
-        if (v.pronunciation) txt += `  /${v.pronunciation}/`;
-        txt += `\n`;
-        txt += `${thinSep}\n`;
-
-        if (v.meanings?.length > 0) {
-          txt += `  Nghĩa:        ${v.meanings.join(', ')}\n`;
-        }
-        if (v.partOfSpeech) {
-          txt += `  Từ loại:      ${v.partOfSpeech}\n`;
-        }
-        if (v.level) {
-          txt += `  Cấp độ:       ${v.level}\n`;
-        }
-        if (v.type) {
-          txt += `  Loại:         ${v.type === 'word' ? 'Từ đơn' : 'Cụm từ'}\n`;
-        }
-        if (v.topic) {
-          txt += `  Chủ đề:       ${v.topic}\n`;
-        }
-        if (v.synonyms?.length > 0) {
-          txt += `  Đồng nghĩa:  ${v.synonyms.join(', ')}\n`;
-        }
-        if (v.antonyms?.length > 0) {
-          txt += `  Trái nghĩa:  ${v.antonyms.join(', ')}\n`;
-        }
-        if (v.examples?.length > 0) {
-          txt += `  Ví dụ:\n`;
-          v.examples.forEach((ex: any, i: number) => {
-            txt += `    ${i + 1}) ${ex.en}\n`;
-            if (ex.vi) txt += `       → ${ex.vi}\n`;
-          });
-        }
-        if (v.note) {
-          txt += `  Ghi chú:      ${v.note}\n`;
-        }
-        txt += `  Link ảnh:     ${(v.imageUrl && v.imageUrl.trim()) ? v.imageUrl.trim() : 'invalid'}\n`;
-        txt += `\n`;
-      });
-
-      txt += `${separator}\n`;
-      txt += `  Hết danh sách (${allVocabs.length} từ)\n`;
-      txt += `${separator}\n`;
-
-      downloadFile(
-        txt,
-        `tu-vung-littlebylittle-${new Date().toISOString().split('T')[0]}.txt`,
-        'text/plain;charset=utf-8'
-      );
-    } catch (err) {
-      alert('Lỗi khi xuất dữ liệu!');
-      console.error(err);
-    } finally {
-      setExporting(false);
-    }
   };
 
   return (
@@ -234,18 +112,25 @@ export default function VocabularyPage({
             </button>
             {exportMenuOpen && (
               <div className="export-menu">
-                <button className="export-menu-item" onClick={exportToJson}>
+                <button className="export-menu-item" onClick={() => handleExport('json')}>
                   <CodeBracketIcon className="icon icon-inline" />
                   <div className="export-menu-text">
                     <span className="export-menu-title">Xuất JSON</span>
-                    <span className="export-menu-desc">Import lại được, kèm link ảnh</span>
+                    <span className="export-menu-desc">Dữ liệu để import lại</span>
                   </div>
                 </button>
-                <button className="export-menu-item" onClick={exportToTxt}>
+                <button className="export-menu-item" onClick={() => handleExport('txt')}>
                   <DocumentTextIcon className="icon icon-inline" />
                   <div className="export-menu-text">
                     <span className="export-menu-title">Xuất TXT</span>
                     <span className="export-menu-desc">Dễ đọc, kèm link ảnh</span>
+                  </div>
+                </button>
+                <button className="export-menu-item" onClick={() => handleExport('csv')}>
+                  <DocumentTextIcon className="icon icon-inline" />
+                  <div className="export-menu-text">
+                    <span className="export-menu-title">Xuất CSV</span>
+                    <span className="export-menu-desc">Chỉ từ & nghĩa (chuẩn Excel)</span>
                   </div>
                 </button>
               </div>

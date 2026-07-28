@@ -305,6 +305,10 @@
   color: var(--accent);
 }
 
+.fb-action-btn.export:hover {
+  color: var(--primary-color);
+}
+
 .fb-action-btn.delete:hover {
   color: #EF4444;
 }

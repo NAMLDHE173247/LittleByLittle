@@ -10,8 +10,12 @@ import {
   EyeIcon,
   BookOpenIcon,
   ClockIcon,
+  ArrowUpTrayIcon,
+  CodeBracketIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/AuthContext'
+import { useVocabularyExport } from '@/hooks/useVocabularyExport'
 import './DecksPage.css'
 
 const BASE_URL = ''
@@ -54,6 +58,25 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
 
   const [deleteDeckTarget, setDeleteDeckTarget] = useState<any | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  const [exportDeck, setExportDeck] = useState<any | null>(null)
+  const { exportVocabularies, exporting, error: exportError, setError: setExportError } = useVocabularyExport()
+
+  const handleExport = async (format: 'json' | 'txt' | 'csv') => {
+    if (!exportDeck) return;
+    await exportVocabularies({
+      format,
+      query: { deck: exportDeck._id },
+      filenameBase: exportDeck.name,
+    });
+    // Do not close modal automatically here to ensure exporting state is visible
+  }
+
+  const closeExportModal = () => {
+    if (exporting) return;
+    setExportDeck(null);
+    setExportError('');
+  }
 
   const openDeckModal = (deck?: any) => {
     if (deck) {
@@ -225,6 +248,14 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                     <span>Chỉnh sửa</span>
                   </button>
                   <button
+                    className="fb-action-btn export"
+                    onClick={(e) => { e.stopPropagation(); setExportDeck(deck) }}
+                    title="Xuất bộ thẻ"
+                  >
+                    <ArrowUpTrayIcon className="action-icon" />
+                    <span>Xuất</span>
+                  </button>
+                  <button
                     className="fb-action-btn delete"
                     onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck) }}
                     title="Xóa bộ thẻ"
@@ -318,10 +349,88 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
               </p>
             </div>
             <div className="modal-footer">
-              <button className="btn-outline" onClick={() => setDeleteDeckTarget(null)}>Hủy</button>
+              <button className="btn-outline" onClick={() => setDeleteDeckTarget(null)} disabled={deleting}>Hủy</button>
               <button className="btn-danger" onClick={handleDeleteDeck} disabled={deleting}>
                 {deleting ? 'Đang xóa...' : 'Xóa bộ thẻ'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Export Modal ===== */}
+      {exportDeck && (
+        <div className="modal-overlay" onClick={closeExportModal}>
+          <div className="modal modal-deck" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h2><ArrowUpTrayIcon className="icon icon-inline" /> Xuất bộ thẻ</h2>
+              <button className="modal-close" onClick={closeExportModal} disabled={exporting}>
+                <XMarkIcon className="icon" />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ paddingBottom: '20px' }}>
+              <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+                Chọn định dạng để xuất bộ thẻ <strong>&quot;{exportDeck.name}&quot;</strong>:
+              </p>
+
+              {exportError && (
+                <div className="form-error" style={{ marginBottom: '16px' }}>
+                  <ExclamationTriangleIcon className="icon icon-inline" /> {exportError}
+                </div>
+              )}
+
+              {exportDeck.wordCount === 0 ? (
+                <div className="empty-state" style={{ padding: '20px 0', border: 'none' }}>
+                  Bộ thẻ này chưa có từ vựng nào.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button 
+                    className="btn-outline" 
+                    onClick={() => handleExport('json')} 
+                    disabled={exporting}
+                    style={{ justifyContent: 'flex-start', padding: '12px 16px', height: 'auto', textAlign: 'left' }}
+                  >
+                    <CodeBracketIcon className="icon icon-inline" style={{ flexShrink: 0, marginRight: '12px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '2px' }}>Xuất JSON</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dữ liệu để import lại, giữ nguyên link ảnh</div>
+                    </div>
+                  </button>
+                  <button 
+                    className="btn-outline" 
+                    onClick={() => handleExport('txt')} 
+                    disabled={exporting}
+                    style={{ justifyContent: 'flex-start', padding: '12px 16px', height: 'auto', textAlign: 'left' }}
+                  >
+                    <DocumentTextIcon className="icon icon-inline" style={{ flexShrink: 0, marginRight: '12px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '2px' }}>Xuất TXT</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dễ đọc, hiển thị đầy đủ chi tiết từ vựng</div>
+                    </div>
+                  </button>
+                  <button 
+                    className="btn-outline" 
+                    onClick={() => handleExport('csv')} 
+                    disabled={exporting}
+                    style={{ justifyContent: 'flex-start', padding: '12px 16px', height: 'auto', textAlign: 'left' }}
+                  >
+                    <DocumentTextIcon className="icon icon-inline" style={{ flexShrink: 0, marginRight: '12px' }} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '2px' }}>Xuất CSV</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Chỉ từ & nghĩa, dễ dàng dùng với Excel / Quizlet / Anki</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <div className="modal-actions" style={{ justifyContent: 'flex-end', width: '100%' }}>
+                {exporting && <span style={{ marginRight: 'auto', alignSelf: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>Đang xuất...</span>}
+                <button className="btn-outline" onClick={closeExportModal} disabled={exporting}>Đóng</button>
+              </div>
             </div>
           </div>
         </div>
