@@ -297,6 +297,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   const advanceLockRef = useRef(false)
   const spokenQuestionIdx = useRef<number>(-1)
   const plannerSessionRef = useRef<QuizSessionState<VocabularyItem> | null>(null)
+  const originalSessionWordsRef = useRef<VocabularyItem[]>([])
 
   // Map progress to easy lookup
   const progressMap = useMemo(() => {
@@ -461,14 +462,15 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     const result = selectNextQuestion(session)
     syncPlannerSession(result.session)
     if (!result.question) return false
-    setQuestions(prev => [...prev, createQuizQuestion(result.question!, vocabularies)])
+    setQuestions(prev => [...prev, createQuizQuestion(result.question!, originalSessionWordsRef.current)])
     return true
-  }, [syncPlannerSession, vocabularies])
+  }, [syncPlannerSession])
 
   const startQuiz = useCallback(() => {
     stopSpeaking?.()
     // Allow starting with at least 1 word for multiple/listen too
     if (filteredWords.length < 1) return
+    originalSessionWordsRef.current = filteredWords
 
     const source = normalizeSource(settings.sourceMode, Boolean(settings.filterDeck))
     const activeSet = {
@@ -493,7 +495,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     if (!first.question) return
 
     syncPlannerSession(first.session)
-    setQuestions([createQuizQuestion(first.question, vocabularies)])
+    setQuestions([createQuizQuestion(first.question, originalSessionWordsRef.current)])
     setActiveSettings(activeSet)
     setCurrentIdx(0)
     resetQuestionUi()
@@ -503,7 +505,58 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     setShowReview(false)
     spokenQuestionIdx.current = -1
     setStarted(true)
-  }, [filteredWords, masteryWords, resetQuestionUi, settings, stopSpeaking, syncPlannerSession, vocabularies])
+  }, [filteredWords, masteryWords, resetQuestionUi, settings, stopSpeaking, syncPlannerSession])
+
+  const startPracticeWrongWords = useCallback(() => {
+    stopSpeaking?.()
+    
+    // 3. Snapshot and deduplicate by stable ID before resetting
+    const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
+    const wrongVocabs = wrongQs.map(q => q.vocab)
+    // 4. Deduplicate by stable ID
+    const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
+
+    if (uniqueVocabs.length < 1) return
+
+    // 2. Temporary practice settings (do not write to settings.questionCount permanently)
+    const practiceSettings = {
+      ...(activeSettings || settings),
+      questionCount: uniqueVocabs.length,
+      shuffle: true,
+      sourceScope: 'all' as SourceScope,
+      sourceOrder: 'random' as SourceOrder
+    }
+    
+    // 7. Distractor pool uses originalSessionWordsRef.current in createQuizQuestion
+    const session = createSessionState(uniqueVocabs, masteryWords || [], {
+      direction: practiceSettings.mode,
+      questionTypes: practiceSettings.questionTypes,
+      questionCount: practiceSettings.questionCount,
+      shuffle: practiceSettings.shuffle,
+      sourceScope: practiceSettings.sourceScope,
+      sourceOrder: practiceSettings.sourceOrder,
+      combineStrategy: practiceSettings.combineStrategy || 'smart',
+    })
+    
+    const first = selectNextQuestion(session)
+    if (!first.question) return
+
+    syncPlannerSession(first.session)
+    setQuestions([createQuizQuestion(first.question, originalSessionWordsRef.current)])
+    
+    // Update activeSettings so UI reflects correct count for this round
+    setActiveSettings(practiceSettings)
+    
+    // 5 & 6. Reset ALL transient states for the new round
+    setCurrentIdx(0)
+    resetQuestionUi()
+    setCorrectCount(0)
+    setTotalAnswered(0)
+    setWrongAnswers([]) // Clears wrongAnswers for this new round
+    setShowReview(false)
+    spokenQuestionIdx.current = -1
+    setStarted(true)
+  }, [activeSettings, settings, masteryWords, wrongAnswers, questions, resetQuestionUi, stopSpeaking, syncPlannerSession])
 
   const handleRestart = () => {
     stopSpeaking?.()
@@ -731,15 +784,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
               <button 
                 className="btn-primary" 
                 style={{ background: '#8B5CF6' }}
-                onClick={() => {
-                  const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
-                  const wrongVocabs = wrongQs.map(q => q.vocab)
-                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
-                  sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
-                  window.location.href = '/writing'
-                }}
+                onClick={startPracticeWrongWords}
               >
-                <PencilSquareIcon className="icon icon-inline" /> Luyện viết lại các từ sai
+                <ArrowPathIcon className="icon icon-inline" /> Tiếp tục ôn từ sai
               </button>
             )}
           </div>
@@ -790,15 +837,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
               <button 
                 className="btn-primary" 
                 style={{ background: '#8B5CF6' }}
-                onClick={() => {
-                  const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
-                  const wrongVocabs = wrongQs.map(q => q.vocab)
-                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
-                  sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
-                  window.location.href = '/writing'
-                }}
+                onClick={startPracticeWrongWords}
               >
-                <PencilSquareIcon className="icon icon-inline" /> Luyện viết lại các từ sai
+                <ArrowPathIcon className="icon icon-inline" /> Tiếp tục ôn từ sai
               </button>
             </div>
           )}
