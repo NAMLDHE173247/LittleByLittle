@@ -635,6 +635,16 @@ html.dark, [data-theme='dark'], .dark {
   }
 }
 
+.quiz-question-top-layout.without-question-image .quiz-question-content-col {
+  width: 100%;
+  min-width: 0;
+}
+
+.quiz-question-top-layout.without-question-image .quiz-question-actions {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .quiz-question-image-col {
   width: 100%;
 }
