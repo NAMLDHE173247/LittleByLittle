@@ -342,6 +342,8 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     const idleForMs = requestTime - lastSpeakEndRef.current;
     const cancelAgoMs = lastCancelTimeRef.current > 0 ? requestTime - lastCancelTimeRef.current : -1;
 
+    let didCancel = false;
+
     if (!isRetry) {
       requestIdRef.current += 1;
       if (SPEECH_DEBUG) {
@@ -349,7 +351,11 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       }
       if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
       if (watchdogTimeoutRef.current) clearTimeout(watchdogTimeoutRef.current);
-      window.speechSynthesis.cancel();
+      
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+        didCancel = true;
+      }
     } else {
       if (SPEECH_DEBUG) console.log(`[TTS] Req ${requestIdRef.current} | Retrying speech for text: "${cleanText}"`);
     }
@@ -360,6 +366,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     }
 
     const currentReqId = requestIdRef.current;
+    const delayMs = didCancel ? 100 : 0;
 
     speakTimeoutRef.current = setTimeout(() => {
       if (currentReqId !== requestIdRef.current) {
@@ -442,7 +449,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
         }
       }, 1500);
 
-    }, 50);
+    }, delayMs);
 
   }, [cancelSpeech, ttsAccent]);
 

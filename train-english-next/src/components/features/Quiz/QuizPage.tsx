@@ -554,6 +554,8 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     setAnswered(true)
     setTotalAnswered(prev => prev + 1)
     
+    speak(q.vocab.word, { mode: 'manual', source: 'quiz-answer-feedback', ownerId: 'quiz-session' })
+
     const isCorrect = idx === q.correctIdx
     const skill = q.type === 'listen' ? 'listening' : 'recall'
     recordQuestionResult(q, isCorrect, hintUsed)
@@ -584,6 +586,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     setWrongAnswers(prev => [...prev, currentIdx])
 
     const q = questions[currentIdx]
+    speak(q.vocab.word, { mode: 'manual', source: 'quiz-answer-feedback', ownerId: 'quiz-session' })
     const skill = q.type === 'listen' ? 'listening' : q.type === 'fill' ? 'writing' : 'recall'
     recordQuestionResult(q, false, false)
     if (submitProgress) {
@@ -617,6 +620,10 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     if (isNearMiss && !isCorrect) {
       setFillNearMissMsg('Gần đúng, kiểm tra lại chính tả.')
       return
+    }
+
+    if (!answered) {
+      speak(q.vocab.word, { mode: 'manual', source: 'quiz-answer-feedback', ownerId: 'quiz-session' })
     }
 
     setFillNearMissMsg('')
@@ -1501,18 +1508,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   function renderResultBanner() {
     if (!hasSubmittedCurrentQuestion) return null;
     
-    // In fill mode, we have a custom incorrect banner
-    if (q.type === 'fill' && fillCorrect === false) {
-      return (
-        <div className="quiz-fill-feedback wrong">
-          <XMarkIcon className="icon" /> Sai rồi! Đáp án đúng: <strong>{q.correctAnswer}</strong>
-        </div>
-      );
-    }
-    
     if (isCurrentAnswerCorrect) {
       return (
-        <div className="quiz-feedback-section">
+        <div className="quiz-feedback-section" role="status" aria-live="polite">
           <div className="quiz-feedback-status" style={{ color: '#15803d', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckIcon className="icon" style={{ width: 24, height: 24 }} /> 
             <strong>Tuyệt vời! Chính xác.</strong>
@@ -1520,7 +1518,22 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
         </div>
       );
     }
-    return null;
+
+    const message = isUnknownAnswer 
+      ? 'Chưa nhớ cũng không sao. Hãy xem lại đáp án nhé!' 
+      : 'Chưa chính xác. Không sao, cố gắng lên nhé!';
+
+    return (
+      <div className="quiz-feedback-section" role="status" aria-live="polite" style={{ marginTop: '16px' }}>
+        <div className="quiz-feedback-status" style={{ color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <XMarkIcon className="icon" style={{ width: 24, height: 24, marginTop: '2px', flexShrink: 0 }} /> 
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: '4px' }}>{message}</div>
+            <div style={{ fontSize: '15px' }}>Đáp án đúng: <strong>{q.correctAnswer}</strong></div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   function renderContinueAction() {
