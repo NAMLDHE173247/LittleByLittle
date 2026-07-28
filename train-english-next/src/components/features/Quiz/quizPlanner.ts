@@ -293,7 +293,13 @@ export function selectNextQuestion<TWord extends PlannerWord>(
   let selectedType: QuestionType | null = null;
   let bestScore = -Infinity;
 
-  for (const word of source) {
+  // Mode: prioritize words that haven't been seen yet, if requested (e.g. for practice wrong words mode)
+  // Let's implement this logic directly here if we know we want unseen words first.
+  // We can just filter source to unseen words first.
+  const unseenCandidates = source.filter((word) => !session.wordStates.has(getWordId(word)));
+  const evalSource = unseenCandidates.length > 0 ? unseenCandidates : source;
+
+  for (const word of evalSource) {
     const wordId = getWordId(word);
     const state = session.wordStates.get(wordId);
     const forcedType = state?.earliestRetryIndex !== undefined && state.earliestRetryIndex <= session.answeredCount

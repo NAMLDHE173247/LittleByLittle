@@ -272,6 +272,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
   const [showSettings, setShowSettings] = useState(false)
   const [isTTSSettingsOpen, setIsTTSSettingsOpen] = useState(false)
   const [started, setStarted] = useState(false)
+  const [sessionMode, setSessionMode] = useState<'normal' | 'wrong-practice'>('normal')
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
@@ -501,9 +502,12 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     resetQuestionUi()
     setCorrectCount(0)
     setTotalAnswered(0)
+    setCorrectCount(0)
+    setTotalAnswered(0)
     setWrongAnswers([])
     setShowReview(false)
     spokenQuestionIdx.current = -1
+    setSessionMode('normal')
     setStarted(true)
   }, [filteredWords, masteryWords, resetQuestionUi, settings, stopSpeaking, syncPlannerSession])
 
@@ -555,6 +559,7 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
     setWrongAnswers([]) // Clears wrongAnswers for this new round
     setShowReview(false)
     spokenQuestionIdx.current = -1
+    setSessionMode('wrong-practice')
     setStarted(true)
   }, [activeSettings, settings, masteryWords, wrongAnswers, questions, resetQuestionUi, stopSpeaking, syncPlannerSession])
 
@@ -781,13 +786,27 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
               <ArrowPathIcon className="icon icon-inline" /> Làm lại Quiz
             </button>
             {wrongAnswers.length > 0 && (
-              <button 
-                className="btn-primary" 
-                style={{ background: '#8B5CF6' }}
-                onClick={startPracticeWrongWords}
-              >
-                <ArrowPathIcon className="icon icon-inline" /> Tiếp tục ôn từ sai
-              </button>
+              <>
+                <button 
+                  className="btn-primary" 
+                  style={{ background: '#8B5CF6' }}
+                  onClick={startPracticeWrongWords}
+                >
+                  <ArrowPathIcon className="icon icon-inline" /> Tiếp tục ôn từ sai
+                </button>
+                <button 
+                  className="btn-outline" 
+                  onClick={() => {
+                    const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
+                    const wrongVocabs = wrongQs.map(q => q.vocab)
+                    const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
+                    sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
+                    window.location.href = '/writing'
+                  }}
+                >
+                  <PencilSquareIcon className="icon icon-inline" /> Luyện viết các từ sai
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -833,13 +852,25 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
             )}
           </div>
           {wrongAnswers.length > 0 && (
-            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ marginTop: '16px', display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button 
                 className="btn-primary" 
                 style={{ background: '#8B5CF6' }}
                 onClick={startPracticeWrongWords}
               >
                 <ArrowPathIcon className="icon icon-inline" /> Tiếp tục ôn từ sai
+              </button>
+              <button 
+                className="btn-outline" 
+                onClick={() => {
+                  const wrongQs = wrongAnswers.map(i => questions[i]).filter(Boolean)
+                  const wrongVocabs = wrongQs.map(q => q.vocab)
+                  const uniqueVocabs = Array.from(new Map(wrongVocabs.map(v => [getVocabId(v), v])).values())
+                  sessionStorage.setItem('writingWords', JSON.stringify(uniqueVocabs))
+                  window.location.href = '/writing'
+                }}
+              >
+                <PencilSquareIcon className="icon icon-inline" /> Luyện viết các từ sai
               </button>
             </div>
           )}
@@ -1609,21 +1640,21 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
           </div>
 
           {(() => {
+            const isPracticeMode = sessionMode === 'wrong-practice'
             const hasGroupAChanged = started && activeSettings && (
               settings.mode !== activeSettings.mode ||
-              settings.questionCount !== activeSettings.questionCount ||
-              settings.shuffle !== activeSettings.shuffle ||
-              settings.filterDeck !== activeSettings.filterDeck ||
-              settings.filterLevel !== activeSettings.filterLevel ||
-              settings.filterTopic !== activeSettings.filterTopic ||
-              settings.filterPOS !== activeSettings.filterPOS ||
-              settings.filterTier !== activeSettings.filterTier ||
-              settings.sourceMode !== activeSettings.sourceMode ||
+              (!isPracticeMode && settings.questionCount !== activeSettings.questionCount) ||
+              (!isPracticeMode && settings.shuffle !== activeSettings.shuffle) ||
+              (!isPracticeMode && settings.filterDeck !== activeSettings.filterDeck) ||
+              (!isPracticeMode && settings.filterLevel !== activeSettings.filterLevel) ||
+              (!isPracticeMode && settings.filterTopic !== activeSettings.filterTopic) ||
+              (!isPracticeMode && settings.filterPOS !== activeSettings.filterPOS) ||
+              (!isPracticeMode && settings.filterTier !== activeSettings.filterTier) ||
+              (!isPracticeMode && settings.sourceMode !== activeSettings.sourceMode) ||
               settings.filterStarredOnly !== activeSettings.filterStarredOnly ||
               settings.requireRetypeOnWrong !== activeSettings.requireRetypeOnWrong ||
               JSON.stringify(settings.questionTypes) !== JSON.stringify(activeSettings.questionTypes)
             )
-
             const hasGroupBChanged = started && activeSettings && (
               settings.autoNext !== activeSettings.autoNext
             )
