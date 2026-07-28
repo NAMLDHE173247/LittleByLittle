@@ -366,6 +366,8 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
     }
 
     submitProgress(wordId, 'writing', isCorrect, isHinted)
+    
+    speakWord(current.vocab.word)
 
     if (isCorrect) {
       setTypingPhase('feedback_ok')
@@ -416,6 +418,8 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
 
     const { isCorrect } = checkAnswer(retypeInput, [current.vocab.word])
     
+    speakWord(current.vocab.word)
+
     if (isCorrect) {
       correctionLockRef.current = true
       setTypingPhase('done')
@@ -462,6 +466,7 @@ export default function WritingMode({ onExit, decks = [], initialWords }: Writin
     const correct = current.vocab.meanings.join(', ')
     const isCorrect = option === correct
 
+    speakWord(current.vocab.word)
     submitProgress(getWordId(current.vocab), 'recall', isCorrect, true)
 
     setTimeout(() => {
