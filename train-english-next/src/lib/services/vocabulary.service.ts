@@ -273,7 +273,7 @@ export class VocabularyService {
   static async bulkImport(words: any[], requestDeckIds: string[] = [], userId: string) {
     await dbConnect();
     if (!words || words.length === 0) throw new Error("Mảng từ vựng rỗng");
-    if (words.length > 200) throw new Error("Tối đa 200 từ vựng mỗi lần import");
+    if (words.length > 300) throw new Error("Tối đa 300 từ vựng mỗi lần import");
 
     // 1. Validate Deck IDs
     if (requestDeckIds.length > 50) throw new Error("Tối đa 50 bộ thẻ mỗi lần import");
