@@ -45,6 +45,7 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
   const [parsedWordsCount, setParsedWordsCount] = useState<number | null>(null);
   const [parseStatus, setParseStatus] = useState<'empty' | 'invalid_json' | 'not_array' | 'empty_array' | 'success'>('empty');
   const [previewWords, setPreviewWords] = useState<string[]>([]);
+  const [meaningsCopied, setMeaningsCopied] = useState(false);
 
   useEffect(() => {
     if (!importJsonText || !importJsonText.trim()) {
@@ -837,7 +838,20 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
 
               {/* Meanings */}
               <div className="detail-section">
-                <h4><LanguageIcon className="icon icon-inline" /> Nghĩa</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0 }}><LanguageIcon className="icon icon-inline" /> Nghĩa</h4>
+                  <button
+                    className={`copy-btn ${meaningsCopied ? 'copied' : ''}`}
+                    onClick={() => {
+                      navigator.clipboard.writeText(detailVocab.meanings.join(', '))
+                      setMeaningsCopied(true)
+                      setTimeout(() => setMeaningsCopied(false), 2000)
+                    }}
+                    title="Sao chép nghĩa"
+                  >
+                    {meaningsCopied ? <CheckIcon className="icon" /> : <ClipboardDocumentIcon className="icon" />}
+                  </button>
+                </div>
                 <ul className="detail-meanings-list">
                   {detailVocab.meanings.map((m: string, i: number) => (
                     <li key={i}>{m}</li>
