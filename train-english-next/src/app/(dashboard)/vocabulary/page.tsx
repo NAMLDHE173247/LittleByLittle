@@ -10,7 +10,7 @@ export default function VocabularyRoute() {
     searchQuery, setSearchQuery, filterCategory, setFilterCategory,
     filterLevel, setFilterLevel, filterTopic, setFilterTopic,
     filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck, filterImage, setFilterImage,
-    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState,
+    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState, resetPaginationContext,
     sortField, sortDir, setSortField, setSortDir,
     selectedRows, isSelectionMode, setIsSelectionMode, setSelectedRows,
     openAddModal, openEditModal, setDetailVocab, setDeleteTarget,
@@ -26,6 +26,7 @@ export default function VocabularyRoute() {
       setSortField(field);
       setSortDir('asc');
     }
+    resetPaginationContext();
   };
 
   const getSortIcon = (field: string) => {
@@ -51,7 +52,7 @@ export default function VocabularyRoute() {
     <VocabularyPage
       data={{ vocabularies, loading, error, metadata, decks, totalFiltered }}
       filters={{ searchQuery, setSearchQuery, filterCategory, setFilterCategory, filterLevel, setFilterLevel, filterTopic, setFilterTopic, filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck, filterImage, setFilterImage }}
-      pagination={{ currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState }}
+      pagination={{ currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState, resetPaginationContext }}
       sorting={{ sortField, sortDir, handleSort, getSortIcon }}
       selection={{ selectedRows, isSelectionMode, setIsSelectionMode, toggleSelectAll, toggleSelectRow, setSelectedRows }}
       actions={{ openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders, fetchVocabularies }}

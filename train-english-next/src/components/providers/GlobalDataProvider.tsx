@@ -115,6 +115,11 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
   const [quickDeckIds, setQuickDeckIds] = useState<string[]>([]);
   const [savingQuickDeck, setSavingQuickDeck] = useState(false);
 
+  const resetPaginationContext = () => {
+    setCurrentPage(1);
+    setSelectedRows([]);
+  };
+
   // Statistics
   const [progressData, setProgressData] = useState<ProgressData | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
@@ -200,11 +205,17 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
 
       if (json.success) {
         const nextTotalPages = Math.max(1, json.pagination?.totalPages || 0);
-        if (currentPage > nextTotalPages && nextTotalPages > 0) {
+        if (currentPage > nextTotalPages) {
+          setSelectedRows([]);
           setCurrentPage(nextTotalPages);
-          return;
+          if ((json.pagination?.total || 0) > 0) return;
         }
-        setVocabularies(json.data);
+        const nextVocabularies = json.data || [];
+        setVocabularies(nextVocabularies);
+        setSelectedRows((selected: string[]) => {
+          const visibleIds = new Set(nextVocabularies.map((v: { _id: string }) => v._id));
+          return selected.filter((id) => visibleIds.has(id));
+        });
         setTotalPagesState(nextTotalPages);
         setTotalFiltered(json.pagination?.total || 0);
         setError('');
@@ -221,6 +232,10 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       }
     }
   };
+
+  useEffect(() => {
+    return () => vocabularyAbortRef.current?.abort();
+  }, []);
 
   // Actions
   const toggleMenu = (key: string) => {
@@ -558,7 +573,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     filterLevel, setFilterLevel, filterTopic, setFilterTopic,
     filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck,
     filterImage, setFilterImage,
-    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState, totalFiltered,
+    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState, totalFiltered, resetPaginationContext,
     sortField, setSortField, sortDir, setSortDir,
     showModal, setShowModal, editingId, setEditingId,
     formData, setFormData, formError, setFormError, saving, setSaving,

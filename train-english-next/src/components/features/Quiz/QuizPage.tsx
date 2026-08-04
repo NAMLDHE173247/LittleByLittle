@@ -1945,28 +1945,20 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
                     {isTargetHidden ? '✏️ ___' : q.questionText}
                   </h2>
                 )}
-                {q.type !== 'listen' && (q.vocab.type || q.vocab.pronunciation) && (
-                  <div className="quiz-word-meta" style={{ visibility: isTargetHidden ? 'hidden' : 'visible' }}>
-                    {q.vocab.type && <span>Loại từ: <strong>{q.vocab.type}</strong></span>}
-                    {q.vocab.type && q.vocab.pronunciation && <span className="quiz-word-meta-divider">|</span>}
-                    {q.vocab.pronunciation && <span>Phiên âm: <strong>{q.vocab.pronunciation}</strong></span>}
-                  </div>
-                )}
               </div>
-              
+
               {shouldShowDetailedFeedback && (
-                <div className="quiz-feedback-inline-wrapper">
-                  <VocabularyFeedbackCard 
-                    vocab={q.vocab} 
-                    statusText={
-                      <div className="quiz-feedback-status-text">
-                        Đáp án đúng là: <strong>{q.direction === 'en2vi' ? q.vocab.meanings.join(', ') : q.vocab.word}</strong>
-                      </div>
-                    }
+                <div className="quiz-feedback-top-wrapper">
+                  <VocabularyFeedbackCard
+                    vocab={q.vocab}
+                    statusText={null}
+                    type={q.vocab.type}
+                    pronunciation={q.vocab.pronunciation}
                     variant="inline"
                   />
                 </div>
               )}
+
             </div>
 
             <div className="quiz-question-actions">
@@ -2032,9 +2024,9 @@ export default function QuizPage({ vocabularies, decks, masteryWords, onEditWord
             {q.direction === 'en2vi'
               ? `Nghĩa của từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...` 
               : `Từ này bắt đầu bằng: ${q.correctAnswer.slice(0, 2)}...`}
-            {q.vocab.examples?.[0] && (
+            {q.direction === 'en2vi' && q.vocab.examples?.[0]?.en && (
               <div style={{ marginTop: '4px', fontStyle: 'italic', opacity: 0.9 }}>
-                {`Ví dụ: "${q.direction === 'en2vi' ? q.vocab.examples[0].en : q.vocab.examples[0].vi}"`}
+                {`Ví dụ: "${q.vocab.examples[0].en}"`}
               </div>
             )}
           </div>

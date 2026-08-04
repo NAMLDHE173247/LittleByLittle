@@ -30,7 +30,7 @@ export interface VocabularyPageProps {
   pagination: {
     currentPage: number; setCurrentPage: any;
     itemsPerPage: 10 | 20 | 50 | 100; setItemsPerPage: (value: 10 | 20 | 50 | 100) => void;
-    totalPagesState: number;
+    totalPagesState: number; resetPaginationContext: () => void;
   };
   sorting: {
     sortField: string; sortDir: string; handleSort: any; getSortIcon: any;
@@ -52,7 +52,7 @@ export default function VocabularyPage({
 }: VocabularyPageProps) {
   const { vocabularies, loading, error, metadata, decks, totalFiltered } = data;
   const { searchQuery, setSearchQuery, filterCategory, setFilterCategory, filterLevel, setFilterLevel, filterTopic, setFilterTopic, filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck, filterImage, setFilterImage } = filters;
-  const { currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState } = pagination;
+  const { currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState, resetPaginationContext } = pagination;
   const { sortField, handleSort, getSortIcon } = sorting;
   const { selectedRows, isSelectionMode, setIsSelectionMode, toggleSelectAll, toggleSelectRow, setSelectedRows } = selection;
   const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders, fetchVocabularies } = actions;
@@ -69,7 +69,7 @@ export default function VocabularyPage({
 
   useEffect(() => setPageInput(String(currentPage)), [currentPage]);
 
-  const resetSelectionAndGoToPage = (page: number) => {
+  const goToPage = (page: number) => {
     setSelectedRows([]);
     setCurrentPage(page);
   };
@@ -120,11 +120,19 @@ export default function VocabularyPage({
   };
 
   const applyPageInput = () => {
-    const parsed = Number(pageInput);
     const maxPage = Math.max(1, totalPagesState);
+    const trimmedInput = pageInput.trim();
+    if (!trimmedInput) {
+      setPageInput(String(currentPage));
+      return;
+    }
+    const parsed = Number(trimmedInput);
     const target = Number.isFinite(parsed) ? Math.min(maxPage, Math.max(1, Math.floor(parsed))) : 1;
-    resetSelectionAndGoToPage(target);
+    setPageInput(String(target));
+    goToPage(target);
   };
+
+  const hasResults = totalFiltered > 0;
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -261,13 +269,13 @@ export default function VocabularyPage({
               type="text"
               placeholder="Tìm từ hoặc nghĩa..."
               value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setSearchQuery(e.target.value); resetPaginationContext() }}
             />
           </div>
           <div className="filter-group">
             <select
               value={filterCategory}
-              onChange={e => { setFilterCategory(e.target.value); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setFilterCategory(e.target.value); resetPaginationContext() }}
             >
               <option value="">Tất cả loại</option>
               <option value="word">Từ</option>
@@ -275,7 +283,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterLevel}
-              onChange={e => { setFilterLevel(e.target.value); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setFilterLevel(e.target.value); resetPaginationContext() }}
             >
               <option value="">Tất cả cấp độ</option>
               {(metadata.uniqueLevels || []).sort().map((l: string) => (
@@ -284,7 +292,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterTopic}
-              onChange={e => { setFilterTopic(e.target.value); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setFilterTopic(e.target.value); resetPaginationContext() }}
             >
               <option value="">Tất cả chủ đề</option>
               {(metadata.uniqueTopics || []).sort().map((t: string) => (
@@ -293,7 +301,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterPartOfSpeech}
-              onChange={e => { setFilterPartOfSpeech(e.target.value); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setFilterPartOfSpeech(e.target.value); resetPaginationContext() }}
             >
               <option value="">Tất cả từ loại</option>
               {(metadata.uniquePartsOfSpeech || []).sort().map((p: string) => (
@@ -302,7 +310,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterDeck}
-              onChange={e => { setFilterDeck(e.target.value); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setFilterDeck(e.target.value); resetPaginationContext() }}
             >
               <option value="">Tất cả bộ thẻ</option>
               {decks.map(d => (
@@ -312,7 +320,7 @@ export default function VocabularyPage({
             <select
               value={filterImage}
               aria-label="Lọc theo trạng thái ảnh"
-              onChange={e => { setFilterImage(e.target.value as ImageFilter); resetSelectionAndGoToPage(1) }}
+              onChange={e => { setFilterImage(e.target.value as ImageFilter); resetPaginationContext() }}
             >
               <option value="all">Tất cả ảnh</option>
               <option value="with">Có ảnh</option>
@@ -327,7 +335,7 @@ export default function VocabularyPage({
             )}
             <button
               className="btn-outline"
-              onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterLevel(''); setFilterTopic(''); setFilterPartOfSpeech(''); setFilterDeck(''); setFilterImage('all'); resetSelectionAndGoToPage(1) }}
+              onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterLevel(''); setFilterTopic(''); setFilterPartOfSpeech(''); setFilterDeck(''); setFilterImage('all'); resetPaginationContext() }}
             >
               <XMarkIcon className="icon icon-inline" /> Xóa bộ lọc
             </button>
@@ -392,6 +400,7 @@ export default function VocabularyPage({
                     value={pageInput}
                     onChange={e => setPageInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') applyPageInput() }}
+                    disabled={!hasResults}
                     aria-label="Nhập số trang"
                   />
                   <span>/ {Math.max(1, totalPagesState)}</span>
@@ -402,24 +411,24 @@ export default function VocabularyPage({
                     value={itemsPerPage}
                     onChange={e => {
                       setItemsPerPage(Number(e.target.value) as 10 | 20 | 50 | 100);
-                      resetSelectionAndGoToPage(1);
+                      resetPaginationContext();
                     }}
                     aria-label="Số bản ghi mỗi trang"
                   >
                     {[10, 20, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}
                   </select>
                 </label>
-                <button className="page-btn" onClick={applyPageInput} aria-label="Áp dụng số trang">Đi</button>
+                <button className="page-btn" onClick={applyPageInput} disabled={!hasResults} aria-label="Áp dụng số trang">Đi</button>
                 <button
                   className="page-btn"
-                  disabled={currentPage === 1}
-                  onClick={() => resetSelectionAndGoToPage(1)}
+                  disabled={!hasResults || currentPage === 1}
+                  onClick={() => goToPage(1)}
                 >
                   ««
                 </button>
                 <button
                   className="page-btn"
-                  disabled={currentPage === 1}
+                  disabled={!hasResults || currentPage === 1}
                   onClick={() => { setSelectedRows([]); setCurrentPage((p: number) => Math.max(1, p - 1)) }}
                 >
                   ‹
@@ -433,7 +442,8 @@ export default function VocabularyPage({
                       )}
                       <button
                         className={`page-btn ${currentPage === p ? 'active' : ''}`}
-                        onClick={() => resetSelectionAndGoToPage(p)}
+                        disabled={!hasResults}
+                        onClick={() => goToPage(p)}
                       >
                         {p}
                       </button>
@@ -441,15 +451,15 @@ export default function VocabularyPage({
                   ))}
                 <button
                   className="page-btn"
-                  disabled={currentPage >= Math.max(1, totalPagesState)}
+                  disabled={!hasResults || currentPage >= Math.max(1, totalPagesState)}
                   onClick={() => { setSelectedRows([]); setCurrentPage((p: number) => Math.min(Math.max(1, totalPagesState), p + 1)) }}
                 >
                   ›
                 </button>
                 <button
                   className="page-btn"
-                  disabled={currentPage >= Math.max(1, totalPagesState)}
-                  onClick={() => resetSelectionAndGoToPage(Math.max(1, totalPagesState))}
+                  disabled={!hasResults || currentPage >= Math.max(1, totalPagesState)}
+                  onClick={() => goToPage(Math.max(1, totalPagesState))}
                 >
                   »»
                 </button>

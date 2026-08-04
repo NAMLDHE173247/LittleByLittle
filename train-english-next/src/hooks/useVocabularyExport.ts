@@ -13,10 +13,12 @@ export type VocabularyExportQuery = {
 };
 
 export type ExportFormat = 'json' | 'txt' | 'csv';
+export type ExportContent = 'full' | 'word' | 'word-meaning';
 
 export function useVocabularyExport() {
   const { authHeaders } = useAuth();
   const [exporting, setExporting] = useState(false);
+  const [copyingWords, setCopyingWords] = useState(false);
   const [error, setError] = useState('');
 
   const fetchAllVocabs = async (query: VocabularyExportQuery): Promise<any[] | null> => {
@@ -70,7 +72,28 @@ export function useVocabularyExport() {
     return `"${safeVal}"`;
   };
 
-  const exportToJson = (allVocabs: any[], filenameBase: string) => {
+  const exportToJson = (allVocabs: any[], filenameBase: string, content: ExportContent) => {
+    if (content === 'word') {
+      downloadFile(
+        JSON.stringify(allVocabs.map((v: any) => v.word || ''), null, 2),
+        `${filenameBase}-${new Date().toISOString().split('T')[0]}.json`,
+        'application/json;charset=utf-8'
+      );
+      return;
+    }
+
+    if (content === 'word-meaning') {
+      downloadFile(
+        JSON.stringify(allVocabs.map((v: any) => ({
+          word: v.word || '',
+          meanings: Array.isArray(v.meanings) ? v.meanings : [],
+        })), null, 2),
+        `${filenameBase}-${new Date().toISOString().split('T')[0]}.json`,
+        'application/json;charset=utf-8'
+      );
+      return;
+    }
+
     const payload = allVocabs.map((v: any) => ({
       word: v.word || '',
       type: v.type || 'word',
@@ -95,7 +118,29 @@ export function useVocabularyExport() {
     );
   };
 
-  const exportToTxt = (allVocabs: any[], filenameBase: string) => {
+  const exportToTxt = (allVocabs: any[], filenameBase: string, content: ExportContent) => {
+    if (content === 'word') {
+      downloadFile(
+        allVocabs.map((v: any) => v.word || '').join('\n'),
+        `${filenameBase}-${new Date().toISOString().split('T')[0]}.txt`,
+        'text/plain;charset=utf-8'
+      );
+      return;
+    }
+
+    if (content === 'word-meaning') {
+      const rows = allVocabs.map((v: any) => {
+        const meanings = Array.isArray(v.meanings) ? v.meanings.join('; ') : '';
+        return `${v.word || ''}\t${meanings}`;
+      });
+      downloadFile(
+        rows.join('\n'),
+        `${filenameBase}-${new Date().toISOString().split('T')[0]}.txt`,
+        'text/plain;charset=utf-8'
+      );
+      return;
+    }
+
     const now = new Date().toLocaleString('vi-VN');
     const separator = '═'.repeat(60);
     const thinSep = '─'.repeat(60);
@@ -160,14 +205,42 @@ export function useVocabularyExport() {
     );
   };
 
-  const exportToCsv = (allVocabs: any[], filenameBase: string) => {
-    let csv = `Từ,Nghĩa\n`;
+  const exportToCsv = (allVocabs: any[], filenameBase: string, content: ExportContent) => {
+    let csv = '';
 
-    allVocabs.forEach((v: any) => {
-      const word = v.word || '';
-      const meanings = Array.isArray(v.meanings) ? v.meanings.join('; ') : (v.meanings || '');
-      csv += `${escapeCsvValue(word)},${escapeCsvValue(meanings)}\n`;
-    });
+    if (content === 'word') {
+      csv = `Từ\n`;
+      allVocabs.forEach((v: any) => {
+        csv += `${escapeCsvValue(v.word || '')}\n`;
+      });
+    } else if (content === 'word-meaning') {
+      csv = `Từ,Nghĩa\n`;
+      allVocabs.forEach((v: any) => {
+        const meanings = Array.isArray(v.meanings) ? v.meanings.join('; ') : (v.meanings || '');
+        csv += `${escapeCsvValue(v.word || '')},${escapeCsvValue(meanings)}\n`;
+      });
+    } else {
+      csv = 'Từ,Nghĩa,Loại,Phiên âm,Từ loại,Ví dụ EN,Ví dụ VI,Chủ đề,Cấp độ,Đồng nghĩa,Trái nghĩa,Ghi chú,Link ảnh\n';
+      allVocabs.forEach((v: any) => {
+        const examples = Array.isArray(v.examples) ? v.examples : [];
+        const values = [
+          v.word || '',
+          Array.isArray(v.meanings) ? v.meanings.join('; ') : '',
+          v.type || '',
+          v.pronunciation || '',
+          v.partOfSpeech || '',
+          examples.map((ex: any) => ex.en || '').filter(Boolean).join(' | '),
+          examples.map((ex: any) => ex.vi || '').filter(Boolean).join(' | '),
+          v.topic || '',
+          v.level || '',
+          Array.isArray(v.synonyms) ? v.synonyms.join('; ') : '',
+          Array.isArray(v.antonyms) ? v.antonyms.join('; ') : '',
+          v.note || '',
+          v.imageUrl || '',
+        ];
+        csv += `${values.map(value => escapeCsvValue(String(value))).join(',')}\n`;
+      });
+    }
 
     downloadFile(
       csv,
@@ -178,6 +251,7 @@ export function useVocabularyExport() {
 
   const exportVocabularies = async (options: {
     format: ExportFormat;
+    content?: ExportContent;
     query: VocabularyExportQuery;
     filenameBase?: string;
   }) => {
@@ -193,16 +267,17 @@ export function useVocabularyExport() {
       }
 
       const safeFilenameBase = sanitizeFilename(options.filenameBase || '');
+      const exportContent = options.content || 'full';
 
       switch (options.format) {
         case 'json':
-          exportToJson(allVocabs, safeFilenameBase);
+          exportToJson(allVocabs, safeFilenameBase, exportContent);
           break;
         case 'txt':
-          exportToTxt(allVocabs, safeFilenameBase);
+          exportToTxt(allVocabs, safeFilenameBase, exportContent);
           break;
         case 'csv':
-          exportToCsv(allVocabs, safeFilenameBase);
+          exportToCsv(allVocabs, safeFilenameBase, exportContent);
           break;
       }
     } catch (err) {
@@ -213,9 +288,39 @@ export function useVocabularyExport() {
     }
   };
 
+  const copyVocabularyWords = async (query: VocabularyExportQuery): Promise<boolean> => {
+    setCopyingWords(true);
+    setError('');
+
+    try {
+      const allVocabs = await fetchAllVocabs(query);
+      if (!allVocabs) return false;
+
+      const words = allVocabs
+        .map(vocab => typeof vocab?.word === 'string' ? vocab.word.trim() : '')
+        .filter(Boolean);
+
+      if (words.length === 0) {
+        setError('Không có từ vựng nào để sao chép!');
+        return false;
+      }
+
+      await navigator.clipboard.writeText(words.join('\n'));
+      return true;
+    } catch (err) {
+      console.error(err);
+      setError('Không thể sao chép danh sách từ. Vui lòng thử lại!');
+      return false;
+    } finally {
+      setCopyingWords(false);
+    }
+  };
+
   return {
     exportVocabularies,
+    copyVocabularyWords,
     exporting,
+    copyingWords,
     error,
     setError, // In case UI wants to dismiss error
   };

@@ -160,6 +160,28 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
   const [isCardExpanded, setIsCardExpanded] = useState(false)
   const [autoPlaySound, setAutoPlaySound] = useState(true)
 
+  const currentWord = words[currentWordIndex]
+  const validExamples = Array.isArray(currentWord?.examples)
+    ? currentWord.examples.filter((example: any) =>
+      example && (
+        (typeof example.en === 'string' && example.en.trim()) ||
+        (typeof example.vi === 'string' && example.vi.trim())
+      )
+    )
+    : []
+  const validSynonyms = Array.isArray(currentWord?.synonyms)
+    ? currentWord.synonyms
+      .filter((synonym: unknown): synonym is string => typeof synonym === 'string' && synonym.trim().length > 0)
+      .map((synonym: string) => synonym.trim())
+    : []
+  const hasExpandableContent = validExamples.length > 0 || validSynonyms.length > 0
+  const detailsId = `practice-card-details-${currentWord?._id ?? currentWordIndex}`
+  const currentWordIdentity = currentWord?._id ?? currentWordIndex
+
+  useEffect(() => {
+    setIsCardExpanded(false)
+  }, [currentWordIdentity])
+
   
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
   const speakTimeout = useRef<NodeJS.Timeout | null>(null)
@@ -839,13 +861,13 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
 
                 {isCardExpanded && (
                   <div className="flashcard-extra-left">
-                    {(words[currentWordIndex].synonyms?.length > 0 || words[currentWordIndex].antonyms?.length > 0) && (
+                    {(validSynonyms.length > 0 || words[currentWordIndex].antonyms?.length > 0) && (
                       <div className="fc-section fc-tags-section">
-                        {words[currentWordIndex].synonyms?.length > 0 && (
+                        {validSynonyms.length > 0 && (
                           <div>
                             <span className="fc-label">Đồng nghĩa:</span>
                             <div className="fc-tags">
-                              {words[currentWordIndex].synonyms.map((s: string, i: number) => (
+                              {validSynonyms.map((s: string, i: number) => (
                                 <span key={i} className="fc-tag syn">{s}</span>
                               ))}
                             </div>
@@ -886,13 +908,23 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
                   {words[currentWordIndex].meanings.join(', ')}
                 </div>
 
-                <button className="flashcard-expand-toggle" onClick={() => setIsCardExpanded(!isCardExpanded)}>
+                {hasExpandableContent && (
+                <button
+                  type="button"
+                  className="flashcard-expand-toggle"
+                  aria-expanded={isCardExpanded}
+                  aria-controls={detailsId}
+                  aria-label={isCardExpanded ? 'Thu gọn ví dụ và từ đồng nghĩa' : 'Hiển thị thêm ví dụ và từ đồng nghĩa'}
+                  title={isCardExpanded ? 'Thu gọn' : 'Hiển thị thêm ví dụ và từ đồng nghĩa'}
+                  onClick={() => setIsCardExpanded(!isCardExpanded)}
+                >
                   {isCardExpanded ? 'Thu gọn' : 'Xem chi tiết'}
                   {isCardExpanded ? <ChevronUpIcon className="icon icon-inline" /> : <ChevronDownIcon className="icon icon-inline" />}
                 </button>
+                )}
 
-                {isCardExpanded && (
-                  <div className="flashcard-details">
+                {hasExpandableContent && isCardExpanded && (
+                  <div id={detailsId} className="flashcard-details">
                     <div className="fc-detail-grid">
                       <div className="fc-detail-item">
                         <span className="fc-label">Phiên âm:</span>
@@ -904,13 +936,13 @@ export default function PracticeFlow({ onExit, decks = [] }: PracticeFlowProps) 
                       </div>
                     </div>
 
-                    {words[currentWordIndex].examples?.length > 0 && (
+                    {validExamples.length > 0 && (
                       <div className="fc-section">
                         <h4><LightBulbIcon className="icon icon-inline" /> Ví dụ</h4>
-                        {words[currentWordIndex].examples.map((ex: any, i: number) => (
+                        {validExamples.map((ex: any, i: number) => (
                           <div key={i} className="fc-example">
-                            <p className="fc-en">{ex.en}</p>
-                            <p className="fc-vi">{ex.vi}</p>
+                            {typeof ex.en === 'string' && ex.en.trim() && <p className="fc-en">{ex.en.trim()}</p>}
+                            {typeof ex.vi === 'string' && ex.vi.trim() && <p className="fc-vi">{ex.vi.trim()}</p>}
                           </div>
                         ))}
                       </div>

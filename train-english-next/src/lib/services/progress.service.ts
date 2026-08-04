@@ -746,7 +746,7 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
     }
     searchFilter.userId = userId;
     const allVocabs = await Vocabulary.find(searchFilter)
-      .select("word pronunciation meanings imageUrl level type partOfSpeech topic")
+      .select("word pronunciation meanings examples synonyms antonyms note imageUrl level type partOfSpeech topic deckIds createdAt")
       .lean();
 
     // Get all progress records
@@ -783,14 +783,26 @@ export const getWords = async (payload: { tier?: string; search?: string; sort?:
         : false;
 
       return {
+        _id: vocab._id.toString(),
         wordId: vocab._id.toString(),
         word: vocab.word,
         pronunciation: vocab.pronunciation || "",
         meanings: vocab.meanings || [],
+        examples: vocab.examples || [],
+        synonyms: vocab.synonyms || [],
+        antonyms: vocab.antonyms || [],
+        note: vocab.note || "",
         imageUrl: vocab.imageUrl || "",
         level: vocab.level || "A1",
         type: vocab.type || "word",
         partOfSpeech: vocab.partOfSpeech || "",
+        topic: vocab.topic || "",
+        deckIds: (vocab.deckIds || []).map((id: mongoose.Types.ObjectId) => ({
+          _id: id.toString(),
+          name: "",
+          color: "",
+        })),
+        createdAt: vocab.createdAt ? new Date(vocab.createdAt).toISOString() : "",
         skills: { recall, listening, writing, pronunciation },
         overall,
         tier: getTier(
@@ -970,4 +982,3 @@ export const clearProgressByWordId = async (payload: { wordId: string }, userId:
     throw error;
   }
 };
-

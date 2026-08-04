@@ -1253,6 +1253,13 @@ body {
   text-align: center;
 }
 
+.page-jump-control input:focus-visible,
+.page-size-control select:focus-visible,
+.page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .page-size-control select {
   padding: 0 22px 0 7px;
 }

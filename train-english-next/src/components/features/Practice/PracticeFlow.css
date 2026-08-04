@@ -365,16 +365,45 @@
   transition: background-color 0.2s;
 }
 
+.flashcard-expand-toggle {
+  font-size: 0;
+}
+
+.flashcard-expand-toggle::after {
+  content: attr(aria-label);
+  font-size: 14px;
+}
+
 .flashcard-expand-toggle:hover {
   background-color: var(--accent-light);
+}
+
+.flashcard-expand-toggle:focus-visible,
+.flashcard-speak-btn:focus-visible,
+.btn-nav:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .flashcard-details {
   width: 100%;
   margin-top: 24px;
   padding-top: 24px;
+  padding-right: 8px;
   border-top: 1px dashed var(--border);
   text-align: left;
+  max-height: min(42vh, 24rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.flashcard-details::-webkit-scrollbar {
+  width: 6px;
+}
+
+.flashcard-details::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
 }
 
 .fc-detail-grid {
@@ -432,11 +461,13 @@
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
 }
 
 .fc-vi {
   font-size: 14px;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .fc-tags-section {
@@ -457,6 +488,7 @@
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .fc-tag.syn {
@@ -1263,4 +1295,24 @@
 
 .stepper-item.active .stepper-desc {
   color: #1e3a8a;
+}
+
+@media (max-width: 768px) {
+  .flashcard-main.expanded {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .flashcard-main.expanded .flashcard-left-col,
+  .flashcard-main.expanded .flashcard-content-wrap {
+    width: 100%;
+  }
+
+  .flashcard-main.expanded .flashcard-image-box {
+    height: 240px;
+  }
+
+  .flashcard-details {
+    max-height: min(50vh, 28rem);
+  }
 }

@@ -13,9 +13,10 @@ import {
   ArrowUpTrayIcon,
   CodeBracketIcon,
   DocumentTextIcon,
+  ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/AuthContext'
-import { useVocabularyExport } from '@/hooks/useVocabularyExport'
+import { useVocabularyExport, type ExportContent } from '@/hooks/useVocabularyExport'
 import './DecksPage.css'
 
 const BASE_URL = ''
@@ -60,22 +61,49 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
   const [deleting, setDeleting] = useState(false)
 
   const [exportDeck, setExportDeck] = useState<any | null>(null)
-  const { exportVocabularies, exporting, error: exportError, setError: setExportError } = useVocabularyExport()
+  const [exportContent, setExportContent] = useState<ExportContent>('full')
+  const [copiedWords, setCopiedWords] = useState(false)
+  const {
+    exportVocabularies,
+    copyVocabularyWords,
+    exporting,
+    copyingWords,
+    error: exportError,
+    setError: setExportError,
+  } = useVocabularyExport()
+  const exportBusy = exporting || copyingWords
 
   const handleExport = async (format: 'json' | 'txt' | 'csv') => {
     if (!exportDeck) return;
     await exportVocabularies({
       format,
+      content: exportContent,
       query: { deck: exportDeck._id },
       filenameBase: exportDeck.name,
     });
     // Do not close modal automatically here to ensure exporting state is visible
   }
 
+  const handleCopyWords = async () => {
+    if (!exportDeck) return
+    setCopiedWords(false)
+    const copied = await copyVocabularyWords({ deck: exportDeck._id })
+    setCopiedWords(copied)
+  }
+
   const closeExportModal = () => {
-    if (exporting) return;
+    if (exportBusy) return;
     setExportDeck(null);
+    setExportContent('full');
+    setCopiedWords(false);
     setExportError('');
+  }
+
+  const openExportModal = (deck: any) => {
+    setExportContent('full');
+    setCopiedWords(false);
+    setExportError('');
+    setExportDeck(deck);
   }
 
   const openDeckModal = (deck?: any) => {
@@ -249,7 +277,7 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                   </button>
                   <button
                     className="fb-action-btn export"
-                    onClick={(e) => { e.stopPropagation(); setExportDeck(deck) }}
+                    onClick={(e) => { e.stopPropagation(); openExportModal(deck) }}
                     title="Xuất bộ thẻ"
                   >
                     <ArrowUpTrayIcon className="action-icon" />
@@ -364,7 +392,7 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
           <div className="modal modal-deck" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="modal-header">
               <h2><ArrowUpTrayIcon className="icon icon-inline" /> Xuất bộ thẻ</h2>
-              <button className="modal-close" onClick={closeExportModal} disabled={exporting}>
+              <button className="modal-close" onClick={closeExportModal} disabled={exportBusy}>
                 <XMarkIcon className="icon" />
               </button>
             </div>
@@ -380,6 +408,51 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                 </div>
               )}
 
+              {exportDeck.wordCount !== 0 && (
+                <fieldset className="deck-export-content-fieldset" disabled={exportBusy}>
+                  <legend>Nội dung xuất</legend>
+                  <div className="deck-export-content-options">
+                    {([
+                      { value: 'full', label: 'Đầy đủ', description: 'Toàn bộ thông tin từ vựng' },
+                      { value: 'word', label: 'Chỉ từ', description: 'Danh sách từ, mỗi từ một dòng' },
+                      { value: 'word-meaning', label: 'Từ và nghĩa', description: 'Từ kèm các nghĩa tương ứng' },
+                    ] as const).map(option => (
+                      <label
+                        key={option.value}
+                        className={`deck-export-content-option ${exportContent === option.value ? 'selected' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="deck-export-content"
+                          value={option.value}
+                          checked={exportContent === option.value}
+                          onChange={() => setExportContent(option.value)}
+                        />
+                        <span>
+                          <strong>{option.label}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+
+              {exportDeck.wordCount !== 0 && (
+                <button
+                  className={`btn-outline deck-export-copy-btn ${copiedWords ? 'copied' : ''}`}
+                  onClick={handleCopyWords}
+                  disabled={exportBusy}
+                  type="button"
+                >
+                  <ClipboardDocumentIcon className="icon icon-inline" />
+                  <span>
+                    <strong>{copiedWords ? 'Đã sao chép' : 'Sao chép nhanh chỉ từ'}</strong>
+                    <small>Mỗi từ một dòng, sẵn sàng để dán</small>
+                  </span>
+                </button>
+              )}
+
               {exportDeck.wordCount === 0 ? (
                 <div className="empty-state" style={{ padding: '20px 0', border: 'none' }}>
                   Bộ thẻ này chưa có từ vựng nào.
@@ -389,37 +462,37 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                   <button 
                     className="btn-outline" 
                     onClick={() => handleExport('json')} 
-                    disabled={exporting}
+                    disabled={exportBusy}
                     style={{ justifyContent: 'flex-start', padding: '12px 16px', height: 'auto', textAlign: 'left' }}
                   >
                     <CodeBracketIcon className="icon icon-inline" style={{ flexShrink: 0, marginRight: '12px' }} />
                     <div>
                       <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '2px' }}>Xuất JSON</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dữ liệu để import lại, giữ nguyên link ảnh</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dữ liệu có cấu trúc, phù hợp lưu trữ và import</div>
                     </div>
                   </button>
                   <button 
                     className="btn-outline" 
                     onClick={() => handleExport('txt')} 
-                    disabled={exporting}
+                    disabled={exportBusy}
                     style={{ justifyContent: 'flex-start', padding: '12px 16px', height: 'auto', textAlign: 'left' }}
                   >
                     <DocumentTextIcon className="icon icon-inline" style={{ flexShrink: 0, marginRight: '12px' }} />
                     <div>
                       <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '2px' }}>Xuất TXT</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dễ đọc, hiển thị đầy đủ chi tiết từ vựng</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dạng văn bản dễ đọc và sao chép</div>
                     </div>
                   </button>
                   <button 
                     className="btn-outline" 
                     onClick={() => handleExport('csv')} 
-                    disabled={exporting}
+                    disabled={exportBusy}
                     style={{ justifyContent: 'flex-start', padding: '12px 16px', height: 'auto', textAlign: 'left' }}
                   >
                     <DocumentTextIcon className="icon icon-inline" style={{ flexShrink: 0, marginRight: '12px' }} />
                     <div>
                       <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '2px' }}>Xuất CSV</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Chỉ từ & nghĩa, dễ dàng dùng với Excel / Quizlet / Anki</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Dễ dùng với Excel, Quizlet và Anki</div>
                     </div>
                   </button>
                 </div>
@@ -428,8 +501,8 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
 
             <div className="modal-footer">
               <div className="modal-actions" style={{ justifyContent: 'flex-end', width: '100%' }}>
-                {exporting && <span style={{ marginRight: 'auto', alignSelf: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>Đang xuất...</span>}
-                <button className="btn-outline" onClick={closeExportModal} disabled={exporting}>Đóng</button>
+                {exportBusy && <span style={{ marginRight: 'auto', alignSelf: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>{copyingWords ? 'Đang sao chép...' : 'Đang xuất...'}</span>}
+                <button className="btn-outline" onClick={closeExportModal} disabled={exportBusy}>Đóng</button>
               </div>
             </div>
           </div>

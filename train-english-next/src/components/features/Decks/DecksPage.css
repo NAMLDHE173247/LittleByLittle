@@ -321,6 +321,106 @@
   transform: scale(1.12);
 }
 
+.deck-export-content-fieldset {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.deck-export-content-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.deck-export-content-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deck-export-content-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.deck-export-content-option:hover {
+  border-color: var(--accent);
+}
+
+.deck-export-content-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.deck-export-content-option input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.deck-export-content-option span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.deck-export-content-option strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.deck-export-content-option small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.deck-export-copy-btn {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  text-align: left;
+}
+
+.deck-export-copy-btn > .icon {
+  flex: 0 0 auto;
+}
+
+.deck-export-copy-btn > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deck-export-copy-btn strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.deck-export-copy-btn small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.deck-export-copy-btn.copied {
+  border-color: var(--stat-green);
+}
+
 /* ====== Responsive ====== */
 @media (max-width: 768px) {
   .decks-container {
@@ -358,6 +458,10 @@
 
   .fb-action-btn {
     padding: 12px 0;
+  }
+
+  .deck-export-content-options {
+    grid-template-columns: 1fr;
   }
 }
 
