@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/AuthContext';
-import type { DeckItem, VocabularyItem, FormData, ProgressData } from '@/types';
+import type { DeckItem, VocabularyItem, FormData, ProgressData, ImageFilter } from '@/types';
 
 export const emptyForm: FormData = {
   word: '',
@@ -58,10 +58,11 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
   const [filterTopic, setFilterTopic] = useState('');
   const [filterPartOfSpeech, setFilterPartOfSpeech] = useState('');
   const [filterDeck, setFilterDeck] = useState('');
+  const [filterImage, setFilterImage] = useState<ImageFilter>('all');
 
   // Pagination & Sorting
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState<10 | 20 | 50 | 100>(10);
   const [sortField, setSortField] = useState<string>('word');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   
@@ -191,14 +192,14 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
       const params = new URLSearchParams({
         page: String(currentPage), limit: String(itemsPerPage), search: debouncedSearchQuery,
         type: filterCategory, level: filterLevel, topic: filterTopic, pos: filterPartOfSpeech,
-        deck: filterDeck, sortBy: sortField, sortDir: sortDir
+        deck: filterDeck, image: filterImage, sortBy: sortField, sortDir: sortDir
       });
       const res = await fetch(`${API_URL}?${params}`, { headers: authHeaders(), signal: controller.signal });
       const json = await res.json();
       if (requestId !== vocabularyRequestIdRef.current) return;
 
       if (json.success) {
-        const nextTotalPages = json.pagination?.totalPages || 1;
+        const nextTotalPages = Math.max(1, json.pagination?.totalPages || 0);
         if (currentPage > nextTotalPages && nextTotalPages > 0) {
           setCurrentPage(nextTotalPages);
           return;
@@ -499,7 +500,7 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     fetchVocabularies();
-  }, [currentPage, debouncedSearchQuery, filterCategory, filterLevel, filterTopic, filterPartOfSpeech, filterDeck, sortField, sortDir]);
+  }, [currentPage, debouncedSearchQuery, filterCategory, filterLevel, filterTopic, filterPartOfSpeech, filterDeck, filterImage, itemsPerPage, sortField, sortDir]);
 
   // Modals Save Action
   const handleSave = async (e: React.FormEvent) => {
@@ -556,7 +557,8 @@ export const GlobalDataProvider = ({ children }: { children: React.ReactNode }) 
     searchQuery, setSearchQuery, filterCategory, setFilterCategory,
     filterLevel, setFilterLevel, filterTopic, setFilterTopic,
     filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck,
-    currentPage, setCurrentPage, totalPagesState, totalFiltered,
+    filterImage, setFilterImage,
+    currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState, totalFiltered,
     sortField, setSortField, sortDir, setSortDir,
     showModal, setShowModal, editingId, setEditingId,
     formData, setFormData, formError, setFormError, saving, setSaving,

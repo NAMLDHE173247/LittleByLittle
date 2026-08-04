@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { BookOpenIcon as BookOpenSolidIcon } from '@heroicons/react/24/solid'
 import { useVocabularyExport } from '@/hooks/useVocabularyExport';
+import type { ImageFilter } from '@/types';
 
 export interface VocabularyPageProps {
   data: {
@@ -24,9 +25,11 @@ export interface VocabularyPageProps {
     filterTopic: string; setFilterTopic: any;
     filterPartOfSpeech: string; setFilterPartOfSpeech: any;
     filterDeck: string; setFilterDeck: any;
+    filterImage: ImageFilter; setFilterImage: (value: ImageFilter) => void;
   };
   pagination: {
     currentPage: number; setCurrentPage: any;
+    itemsPerPage: 10 | 20 | 50 | 100; setItemsPerPage: (value: 10 | 20 | 50 | 100) => void;
     totalPagesState: number;
   };
   sorting: {
@@ -39,7 +42,7 @@ export interface VocabularyPageProps {
   actions: {
     openAddModal: any; openEditModal: any; setDetailVocab: any; setDeleteTarget: any;
     setShowImportModal: any; setImportResult: any; setImportError: any; setImportJsonText: any;
-    setQuickDeckVocab: any; setQuickDeckIds: any; speak: any; getLevelColor: any;
+    setQuickDeckVocab: any; setQuickDeckIds: any; speak: any; getLevelColor: any; fetchVocabularies: () => void;
     authHeaders: () => Record<string, string>;
   };
 }
@@ -48,17 +51,80 @@ export default function VocabularyPage({
   data, filters, pagination, sorting, selection, actions
 }: VocabularyPageProps) {
   const { vocabularies, loading, error, metadata, decks, totalFiltered } = data;
-  const { searchQuery, setSearchQuery, filterCategory, setFilterCategory, filterLevel, setFilterLevel, filterTopic, setFilterTopic, filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck } = filters;
-  const { currentPage, setCurrentPage, totalPagesState } = pagination;
+  const { searchQuery, setSearchQuery, filterCategory, setFilterCategory, filterLevel, setFilterLevel, filterTopic, setFilterTopic, filterPartOfSpeech, setFilterPartOfSpeech, filterDeck, setFilterDeck, filterImage, setFilterImage } = filters;
+  const { currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPagesState } = pagination;
   const { sortField, handleSort, getSortIcon } = sorting;
   const { selectedRows, isSelectionMode, setIsSelectionMode, toggleSelectAll, toggleSelectRow, setSelectedRows } = selection;
-  const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders } = actions;
+  const { openAddModal, openEditModal, setDetailVocab, setDeleteTarget, setShowImportModal, setImportResult, setImportError, setImportJsonText, setQuickDeckVocab, setQuickDeckIds, speak, getLevelColor, authHeaders, fetchVocabularies } = actions;
 
   const { exportVocabularies, exporting, error: exportError, setError: setExportError } = useVocabularyExport();
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
   const [editingImageUrl, setEditingImageUrl] = useState<string>('');
+  const [savingImageId, setSavingImageId] = useState<string | null>(null);
+  const [imagePreviewValid, setImagePreviewValid] = useState(false);
+  const [imageEditError, setImageEditError] = useState('');
+  const [pageInput, setPageInput] = useState(String(currentPage));
+
+  useEffect(() => setPageInput(String(currentPage)), [currentPage]);
+
+  const resetSelectionAndGoToPage = (page: number) => {
+    setSelectedRows([]);
+    setCurrentPage(page);
+  };
+
+  const saveInlineImage = async (vocabId: string) => {
+    if (savingImageId) return;
+    const imageUrl = editingImageUrl.trim();
+    if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+      setImageEditError('URL ảnh phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
+    if (imageUrl && !imagePreviewValid) {
+      setImageEditError('Ảnh chưa tải thành công, vui lòng kiểm tra lại URL.');
+      return;
+    }
+
+    setSavingImageId(vocabId);
+    setImageEditError('');
+    try {
+      const res = await fetch(`/api/vocabulary/${vocabId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ imageUrl }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        setImageEditError(result.message || 'Không thể lưu ảnh.');
+        return;
+      }
+      setEditingImageId(null);
+      setEditingImageUrl('');
+      setImagePreviewValid(false);
+      setImageEditError('');
+      setSelectedRows((prev: string[]) => prev.filter((id: string) => id !== vocabId));
+      fetchVocabularies();
+    } catch {
+      setImageEditError('Lỗi kết nối khi lưu ảnh.');
+    } finally {
+      setSavingImageId(null);
+    }
+  };
+
+  const openInlineImageEditor = (vocabId: string, imageUrl = '') => {
+    setEditingImageId(vocabId);
+    setEditingImageUrl(imageUrl);
+    setImagePreviewValid(false);
+    setImageEditError('');
+  };
+
+  const applyPageInput = () => {
+    const parsed = Number(pageInput);
+    const maxPage = Math.max(1, totalPagesState);
+    const target = Number.isFinite(parsed) ? Math.min(maxPage, Math.max(1, Math.floor(parsed))) : 1;
+    resetSelectionAndGoToPage(target);
+  };
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -89,6 +155,7 @@ export default function VocabularyPage({
         topic: filterTopic,
         pos: filterPartOfSpeech,
         deck: filterDeck,
+        image: filterImage,
       }
     });
   };
@@ -194,13 +261,13 @@ export default function VocabularyPage({
               type="text"
               placeholder="Tìm từ hoặc nghĩa..."
               value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1) }}
+              onChange={e => { setSearchQuery(e.target.value); resetSelectionAndGoToPage(1) }}
             />
           </div>
           <div className="filter-group">
             <select
               value={filterCategory}
-              onChange={e => { setFilterCategory(e.target.value); setCurrentPage(1) }}
+              onChange={e => { setFilterCategory(e.target.value); resetSelectionAndGoToPage(1) }}
             >
               <option value="">Tất cả loại</option>
               <option value="word">Từ</option>
@@ -208,7 +275,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterLevel}
-              onChange={e => { setFilterLevel(e.target.value); setCurrentPage(1) }}
+              onChange={e => { setFilterLevel(e.target.value); resetSelectionAndGoToPage(1) }}
             >
               <option value="">Tất cả cấp độ</option>
               {(metadata.uniqueLevels || []).sort().map((l: string) => (
@@ -217,7 +284,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterTopic}
-              onChange={e => { setFilterTopic(e.target.value); setCurrentPage(1) }}
+              onChange={e => { setFilterTopic(e.target.value); resetSelectionAndGoToPage(1) }}
             >
               <option value="">Tất cả chủ đề</option>
               {(metadata.uniqueTopics || []).sort().map((t: string) => (
@@ -226,7 +293,7 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterPartOfSpeech}
-              onChange={e => { setFilterPartOfSpeech(e.target.value); setCurrentPage(1) }}
+              onChange={e => { setFilterPartOfSpeech(e.target.value); resetSelectionAndGoToPage(1) }}
             >
               <option value="">Tất cả từ loại</option>
               {(metadata.uniquePartsOfSpeech || []).sort().map((p: string) => (
@@ -235,12 +302,21 @@ export default function VocabularyPage({
             </select>
             <select
               value={filterDeck}
-              onChange={e => { setFilterDeck(e.target.value); setCurrentPage(1) }}
+              onChange={e => { setFilterDeck(e.target.value); resetSelectionAndGoToPage(1) }}
             >
               <option value="">Tất cả bộ thẻ</option>
               {decks.map(d => (
                 <option key={d._id} value={d._id}>{d.name}</option>
               ))}
+            </select>
+            <select
+              value={filterImage}
+              aria-label="Lọc theo trạng thái ảnh"
+              onChange={e => { setFilterImage(e.target.value as ImageFilter); resetSelectionAndGoToPage(1) }}
+            >
+              <option value="all">Tất cả ảnh</option>
+              <option value="with">Có ảnh</option>
+              <option value="without">Chưa có ảnh</option>
             </select>
             {selectedRows.length > 0 && (
               <button className="btn-danger-outline" onClick={() => {
@@ -251,7 +327,7 @@ export default function VocabularyPage({
             )}
             <button
               className="btn-outline"
-              onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterLevel(''); setFilterTopic(''); setFilterPartOfSpeech(''); setFilterDeck(''); setCurrentPage(1) }}
+              onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterLevel(''); setFilterTopic(''); setFilterPartOfSpeech(''); setFilterDeck(''); setFilterImage('all'); resetSelectionAndGoToPage(1) }}
             >
               <XMarkIcon className="icon icon-inline" /> Xóa bộ lọc
             </button>
@@ -307,17 +383,44 @@ export default function VocabularyPage({
                 )}
               </div>
               <div className="page-buttons">
+                <label className="page-jump-control">
+                  <span>Trang</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, totalPagesState)}
+                    value={pageInput}
+                    onChange={e => setPageInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') applyPageInput() }}
+                    aria-label="Nhập số trang"
+                  />
+                  <span>/ {Math.max(1, totalPagesState)}</span>
+                </label>
+                <label className="page-size-control">
+                  <span>Hiển thị</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={e => {
+                      setItemsPerPage(Number(e.target.value) as 10 | 20 | 50 | 100);
+                      resetSelectionAndGoToPage(1);
+                    }}
+                    aria-label="Số bản ghi mỗi trang"
+                  >
+                    {[10, 20, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                </label>
+                <button className="page-btn" onClick={applyPageInput} aria-label="Áp dụng số trang">Đi</button>
                 <button
                   className="page-btn"
                   disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(1)}
+                  onClick={() => resetSelectionAndGoToPage(1)}
                 >
                   ««
                 </button>
                 <button
                   className="page-btn"
                   disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p: number) => p - 1)}
+                  onClick={() => { setSelectedRows([]); setCurrentPage((p: number) => Math.max(1, p - 1)) }}
                 >
                   ‹
                 </button>
@@ -330,7 +433,7 @@ export default function VocabularyPage({
                       )}
                       <button
                         className={`page-btn ${currentPage === p ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(p)}
+                        onClick={() => resetSelectionAndGoToPage(p)}
                       >
                         {p}
                       </button>
@@ -338,15 +441,15 @@ export default function VocabularyPage({
                   ))}
                 <button
                   className="page-btn"
-                  disabled={currentPage === totalPagesState}
-                  onClick={() => setCurrentPage((p: number) => p + 1)}
+                  disabled={currentPage >= Math.max(1, totalPagesState)}
+                  onClick={() => { setSelectedRows([]); setCurrentPage((p: number) => Math.min(Math.max(1, totalPagesState), p + 1)) }}
                 >
                   ›
                 </button>
                 <button
                   className="page-btn"
-                  disabled={currentPage === totalPagesState}
-                  onClick={() => setCurrentPage(totalPagesState)}
+                  disabled={currentPage >= Math.max(1, totalPagesState)}
+                  onClick={() => resetSelectionAndGoToPage(Math.max(1, totalPagesState))}
                 >
                   »»
                 </button>
@@ -415,56 +518,56 @@ export default function VocabularyPage({
                                 className="inline-image-input"
                                 placeholder="Dán URL ảnh..."
                                 value={editingImageUrl}
-                                onChange={e => setEditingImageUrl(e.target.value)}
-                                onKeyDown={async e => {
+                                onChange={e => {
+                                  const value = e.target.value;
+                                  const trimmedValue = value.trim();
+                                  setEditingImageUrl(value);
+                                  setImagePreviewValid(false);
+                                  setImageEditError(trimmedValue && !/^https?:\/\//i.test(trimmedValue)
+                                    ? 'URL ảnh phải bắt đầu bằng http:// hoặc https://'
+                                    : '');
+                                }}
+                                onKeyDown={e => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault()
-                                    try {
-                                      const res = await fetch(`/api/vocabulary/${vocab._id}`, {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                                        body: JSON.stringify({ imageUrl: editingImageUrl.trim() })
-                                      })
-                                      const result = await res.json()
-                                      if (result.success) {
-                                        vocab.imageUrl = editingImageUrl.trim()
-                                      }
-                                    } catch (err) { console.error(err) }
+                                    void saveInlineImage(vocab._id)
+                                  } else if (e.key === 'Escape' && !savingImageId) {
                                     setEditingImageId(null)
                                     setEditingImageUrl('')
-                                  } else if (e.key === 'Escape') {
-                                    setEditingImageId(null)
-                                    setEditingImageUrl('')
+                                    setImagePreviewValid(false)
+                                    setImageEditError('')
                                   }
-                                }}
-                                onBlur={async () => {
-                                  if (editingImageUrl.trim() && editingImageUrl.trim() !== vocab.imageUrl) {
-                                    try {
-                                      const res = await fetch(`/api/vocabulary/${vocab._id}`, {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-                                        body: JSON.stringify({ imageUrl: editingImageUrl.trim() })
-                                      })
-                                      const result = await res.json()
-                                      if (result.success) {
-                                        vocab.imageUrl = editingImageUrl.trim()
-                                      }
-                                    } catch (err) { console.error(err) }
-                                  }
-                                  setEditingImageId(null)
-                                  setEditingImageUrl('')
                                 }}
                                 autoFocus
+                                disabled={savingImageId === vocab._id}
                               />
                               {editingImageUrl && (
                                 <img
                                   className="inline-image-preview"
                                   src={editingImageUrl}
                                   alt="Preview"
-                                  onError={e => (e.currentTarget.style.display = 'none')}
-                                  onLoad={e => (e.currentTarget.style.display = 'block')}
+                                  style={{ display: imagePreviewValid ? 'block' : 'none' }}
+                                  onError={() => { setImagePreviewValid(false); setImageEditError('Ảnh chưa tải thành công, vui lòng kiểm tra lại URL.') }}
+                                  onLoad={() => { setImagePreviewValid(true); setImageEditError('') }}
                                 />
                               )}
+                              <div className="inline-image-actions">
+                                <button
+                                  type="button"
+                                  className="btn-primary btn-sm"
+                                  onClick={() => void saveInlineImage(vocab._id)}
+                                  disabled={savingImageId === vocab._id || (!!editingImageUrl.trim() && !imagePreviewValid)}
+                                >
+                                  {savingImageId === vocab._id ? 'Đang lưu...' : 'Lưu'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-outline btn-sm"
+                                  onClick={() => { setEditingImageId(null); setEditingImageUrl(''); setImagePreviewValid(false); setImageEditError('') }}
+                                  disabled={savingImageId === vocab._id}
+                                >Hủy</button>
+                              </div>
+                              {imageEditError && <span className="inline-image-error" role="alert">{imageEditError}</span>}
                             </div>
                           ) : vocab.imageUrl ? (
                             <img
@@ -472,14 +575,14 @@ export default function VocabularyPage({
                               src={vocab.imageUrl}
                               alt={vocab.word}
                               onError={e => (e.currentTarget.src = '')}
-                              onClick={() => { setEditingImageId(vocab._id); setEditingImageUrl(vocab.imageUrl || '') }}
+                              onClick={() => openInlineImageEditor(vocab._id, vocab.imageUrl || '')}
                               style={{ cursor: 'pointer' }}
                               title="Click để sửa ảnh"
                             />
                           ) : (
                             <span
                               className="table-thumb-empty table-thumb-empty--clickable"
-                              onClick={() => { setEditingImageId(vocab._id); setEditingImageUrl('') }}
+                               onClick={() => openInlineImageEditor(vocab._id)}
                               title="Click để thêm ảnh"
                             >
                               <PhotoIcon className="icon" />

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/AuthContext';
+import type { ImageFilter } from '@/types';
 
 export type VocabularyExportQuery = {
   search?: string;
@@ -8,6 +9,7 @@ export type VocabularyExportQuery = {
   topic?: string;
   pos?: string;
   deck?: string;
+  image?: ImageFilter;
 };
 
 export type ExportFormat = 'json' | 'txt' | 'csv';

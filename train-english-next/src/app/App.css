@@ -1224,6 +1224,37 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+.page-jump-control,
+.page-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.page-jump-control input,
+.page-size-control select {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.page-jump-control input {
+  width: 54px;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.page-size-control select {
+  padding: 0 22px 0 7px;
 }
 
 .page-btn {
@@ -1998,6 +2029,20 @@ body {
   margin-top: 4px;
   border: 1px solid var(--border);
   display: none;
+}
+
+.inline-image-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.inline-image-error {
+  display: block;
+  margin-top: 5px;
+  color: var(--danger, #ef4444);
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 /* ===================================================

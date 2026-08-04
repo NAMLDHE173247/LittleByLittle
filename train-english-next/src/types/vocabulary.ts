@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+export type ImageFilter = "all" | "with" | "without";
+
 export interface IVocabulary {
   _id: string | mongoose.Types.ObjectId;
   userId: string | mongoose.Types.ObjectId;

@@ -26,7 +26,7 @@ export interface VocabularyItem {
   synonyms: string[]
   antonyms: string[]
   note: string
-  imageUrl: string
+  imageUrl: string | null
   deckIds: DeckRef[]
   createdAt: string
 }

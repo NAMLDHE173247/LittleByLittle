@@ -3,7 +3,7 @@ import dbConnect from "../db/connection";
 import mongoose, { SortOrder } from "mongoose";
 import { normalizeVocabularyWord } from "../utils/vocabularyUtils";
 
-type VocabularyQueryArgs = Partial<Record<"page" | "limit" | "search" | "type" | "level" | "topic" | "pos" | "deck" | "sortBy" | "sortDir", string>>;
+type VocabularyQueryArgs = Partial<Record<"page" | "limit" | "search" | "type" | "level" | "topic" | "pos" | "deck" | "sortBy" | "sortDir" | "image", string>>;
 
 export class VocabularyService {
   private static readonly MAX_PAGE_SIZE = 100;
@@ -36,6 +36,7 @@ export class VocabularyService {
       topic = "",
       pos = "",
       deck = "",
+      image = "all",
     } = queryArgs;
 
     const query: Record<string, unknown> = { userId }; // Lọc theo user
@@ -53,6 +54,19 @@ export class VocabularyService {
     if (topic) query.topic = topic;
     if (pos) query.partOfSpeech = pos;
     if (deck) query.deckIds = deck;
+    if (image === "with") {
+      query.imageUrl = { $regex: /\S/ };
+    } else if (image === "without") {
+      query.$and = [
+        {
+          $or: [
+            { imageUrl: { $exists: false } },
+            { imageUrl: null },
+            { imageUrl: { $regex: /^\s*$/ } },
+          ],
+        },
+      ];
+    }
 
     return query;
   }
@@ -178,6 +192,14 @@ export class VocabularyService {
 
   static async update(id: string, data: any, userId: string) {
     await dbConnect();
+
+    if (Object.prototype.hasOwnProperty.call(data, "imageUrl")) {
+      const imageUrl = data.imageUrl == null ? "" : String(data.imageUrl).trim();
+      if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+        throw new Error("URL ảnh phải bắt đầu bằng http:// hoặc https://");
+      }
+      data = { ...data, imageUrl };
+    }
     
     if (data.deckIds) {
       data.deckIds = await this.verifyDeckIds(data.deckIds, userId);
