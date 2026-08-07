@@ -456,8 +456,7 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
         .dm-summary-item,
         .dm-header-actions,
         .dm-pagination,
-        .dm-word-row,
-        .dm-recall-row {
+        .dm-word-row {
           display: flex;
           align-items: center;
         }
@@ -688,13 +687,14 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
         }
 
         .dm-recall-row {
-          display: grid;
-          grid-template-columns: 52px minmax(110px, 1fr) 36px;
+          display: flex;
           align-items: center;
-          gap: 10px;
+          justify-content: space-between;
+          gap: 8px;
           padding: 6px 8px;
           border-radius: 8px;
           background-color: rgba(59, 130, 246, 0.08);
+          min-width: 140px;
         }
 
         .dm-recall-label {
@@ -705,6 +705,7 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
         }
 
         .dm-recall-bar-wrap {
+          flex: 1;
           height: 8px;
           overflow: hidden;
           border-radius: 999px;
