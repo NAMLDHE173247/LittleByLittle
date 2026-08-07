@@ -84,7 +84,7 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
   const buildImportPrompt = (includeImage: boolean) => {
     return `Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng và cụm từ tiếng Anh quan trọng, phù hợp với chủ đề "[CHỦ ĐỀ]" và trình độ "[TRÌNH ĐỘ]".${
       includeImage 
-      ? `\nVới mỗi từ, hãy thêm trường "imageUrl" là một đường dẫn ảnh minh họa hợp lệ (URL công khai). Không được tự bịa hoặc đoán URL. Nếu không xác minh được URL ảnh công khai hợp lệ thì trả về "imageUrl": "".` 
+      ? `\nVới mỗi từ, hãy thêm trường "imageUrl" là một đường dẫn ảnh minh họa hợp lệ (URL công khai).` 
       : ''
     }
 Chỉ trả về một JSON array hợp lệ. Không dùng Markdown, không thêm giải thích, tiêu đề hoặc bất kỳ nội dung nào ngoài JSON.
@@ -94,7 +94,7 @@ Mỗi mục phải có cấu trúc sau:
 [
 {
 "word": "từ hoặc cụm từ tiếng Anh",
-"type": "word | phrase (chỉ dùng 'word' nếu là từ đơn, 'phrase' nếu là collocation, phrasal verb, idiom hoặc cụm từ)",
+"type": "phrase",
 "pronunciation": "/phiên âm IPA/",
 "meanings": [
 "nghĩa tiếng Việt chính xác trong ngữ cảnh",
@@ -108,7 +108,7 @@ Mỗi mục phải có cấu trúc sau:
 }
 ],
 "topic": "[CHỦ ĐỀ]",
-"level": "[TRÌNH ĐỘ] (chỉ chọn 1 trong: A1, A2, B1, B2, C1, C2)",
+"level": "B1",
 "synonyms": [
 "từ hoặc cụm từ đồng nghĩa phù hợp với ngữ cảnh"
 ],
@@ -116,7 +116,7 @@ Mỗi mục phải có cấu trúc sau:
 "từ hoặc cụm từ trái nghĩa phù hợp với ngữ cảnh"
 ],
 "note": "ghi chú ngắn gọn về cách dùng, cấu trúc, giới từ đi kèm, lỗi thường gặp hoặc mẹo ghi nhớ"${
-      includeImage ? ',\n"imageUrl": "https://.../anh-minh-hoa.jpg"' : ''
+      includeImage ? ',\n"imageUrl": ""' : ''
     }
 }
 ]
@@ -150,10 +150,14 @@ tự nhiên và đúng ngữ pháp;
 phù hợp với trình độ "[TRÌNH ĐỘ]";
 liên quan đến chủ đề "[CHỦ ĐỀ]";
 có bản dịch tiếng Việt tương ứng.
+Trường "type" chỉ được phép là:
+- "word": từ đơn
+- "phrase": collocation, phrasal verb, idiom hoặc cụm từ
+Trường "level" chỉ được phép là: A1, A2, B1, B2, C1 hoặc C2.
 Trường "pronunciation" phải dùng IPA chuẩn:
 dùng phát âm Anh-Anh hoặc Anh-Mỹ nhất quán;
-với cụm từ, cung cấp phiên âm cho toàn bộ cụm;
-không tự tạo phiên âm nếu không chắc chắn.
+với cụm từ, cung cấp phiên âm cho toàn bộ cụm.
+Nếu không chắc chắn về IPA, trả về "pronunciation": "".
 Trường "synonyms" và "antonyms":
 chỉ thêm từ thực sự phù hợp với nghĩa trong ngữ cảnh;
 không thêm từ gần nghĩa nhưng khác cách sử dụng;
@@ -164,7 +168,11 @@ giới từ đi kèm;
 collocation;
 sự khác biệt với từ dễ nhầm;
 lỗi người học thường mắc;
-mẹo ghi nhớ ngắn gọn.
+mẹo ghi nhớ ngắn gọn.${
+      includeImage 
+      ? `\nTrường "imageUrl":\nNếu xác minh được URL ảnh công khai hợp lệ, thay chuỗi rỗng bằng URL đó.\nNếu không xác minh được, bắt buộc giữ "imageUrl": "". Không được tự bịa hoặc đoán URL.`
+      : ''
+    }
 Không để thiếu bất kỳ trường nào.
 Không sử dụng giá trị null.
 Không thêm dấu phẩy thừa ở phần tử cuối.
