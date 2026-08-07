@@ -81,7 +81,12 @@ export default function VocabularyModals({ modalsState, modalsActions }: Vocabul
     return () => clearTimeout(timer);
   }, [importJsonText]);
 
-  const IMPORT_PROMPT_BASIC = `Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng và cụm từ tiếng Anh quan trọng, phù hợp với chủ đề "[CHỦ ĐỀ]" và trình độ "[TRÌNH ĐỘ]".
+  const buildImportPrompt = (includeImage: boolean) => {
+    return `Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng và cụm từ tiếng Anh quan trọng, phù hợp với chủ đề "[CHỦ ĐỀ]" và trình độ "[TRÌNH ĐỘ]".${
+      includeImage 
+      ? `\nVới mỗi từ, hãy thêm trường "imageUrl" là một đường dẫn ảnh minh họa hợp lệ (URL công khai). Không được tự bịa hoặc đoán URL. Nếu không xác minh được URL ảnh công khai hợp lệ thì trả về "imageUrl": "".` 
+      : ''
+    }
 Chỉ trả về một JSON array hợp lệ. Không dùng Markdown, không thêm giải thích, tiêu đề hoặc bất kỳ nội dung nào ngoài JSON.
 NỘI DUNG:
 [NỘI DUNG CẦN TRÍCH XUẤT]
@@ -89,13 +94,13 @@ Mỗi mục phải có cấu trúc sau:
 [
 {
 "word": "từ hoặc cụm từ tiếng Anh",
-"type": "word | phrase | phrasal_verb | collocation",
+"type": "word | phrase (chỉ dùng 'word' nếu là từ đơn, 'phrase' nếu là collocation, phrasal verb, idiom hoặc cụm từ)",
 "pronunciation": "/phiên âm IPA/",
 "meanings": [
 "nghĩa tiếng Việt chính xác trong ngữ cảnh",
 "nghĩa tiếng Việt bổ sung nếu thực sự cần thiết"
 ],
-"partOfSpeech": "noun | verb | adjective | adverb | noun phrase | verb phrase | adjective phrase | phrasal verb",
+"partOfSpeech": "noun | verb | adjective | adverb | phrasal verb | idiom | noun phrase | verb phrase | ...",
 "examples": [
 {
 "en": "câu ví dụ tiếng Anh tự nhiên, đúng ngữ pháp và có chứa từ hoặc cụm từ đang học",
@@ -103,14 +108,16 @@ Mỗi mục phải có cấu trúc sau:
 }
 ],
 "topic": "[CHỦ ĐỀ]",
-"level": "[TRÌNH ĐỘ]",
+"level": "[TRÌNH ĐỘ] (chỉ chọn 1 trong: A1, A2, B1, B2, C1, C2)",
 "synonyms": [
 "từ hoặc cụm từ đồng nghĩa phù hợp với ngữ cảnh"
 ],
 "antonyms": [
 "từ hoặc cụm từ trái nghĩa phù hợp với ngữ cảnh"
 ],
-"note": "ghi chú ngắn gọn về cách dùng, cấu trúc, giới từ đi kèm, lỗi thường gặp hoặc mẹo ghi nhớ"
+"note": "ghi chú ngắn gọn về cách dùng, cấu trúc, giới từ đi kèm, lỗi thường gặp hoặc mẹo ghi nhớ"${
+      includeImage ? ',\n"imageUrl": "https://.../anh-minh-hoa.jpg"' : ''
+    }
 }
 ]
 YÊU CẦU:
@@ -124,10 +131,10 @@ collocation;
 từ nối và cụm học thuật quan trọng.
 Giữ nguyên các cụm từ có ý nghĩa hoàn chỉnh. Không tự ý tách một cụm thành nhiều từ riêng nếu việc tách làm mất nghĩa hoặc cách dùng.
 Ví dụ:
+giữ "make a decision" là một cụm;
+giữ "look forward to" là một cụm;
 giữ "the combined effect" là một cụm;
-giữ "play a crucial role in" là một cụm;
-giữ "contribute to" là một cụm;
-giữ "as a result" là một cụm.
+giữ "break the ice" là một cụm.
 Không trích xuất:
 từ quá cơ bản không có giá trị học tập;
 tên riêng;
@@ -161,92 +168,12 @@ mẹo ghi nhớ ngắn gọn.
 Không để thiếu bất kỳ trường nào.
 Không sử dụng giá trị null.
 Không thêm dấu phẩy thừa ở phần tử cuối.
-Không đặt JSON trong dấu \`\`\`.
+Không đặt JSON trong code fence (không dùng \`\`\`json).
 Kết quả phải là JSON hợp lệ và có thể parse trực tiếp.`;
+  }
 
-  const IMPORT_PROMPT_FULL = `Từ nội dung dưới đây, hãy trích xuất tất cả các từ vựng và cụm từ tiếng Anh quan trọng, phù hợp với chủ đề "[CHỦ ĐỀ]" và trình độ "[TRÌNH ĐỘ]". Với mỗi từ, hãy thêm trường "imageUrl" là một đường dẫn ảnh minh họa hợp lệ (URL công khai trực tiếp tới file ảnh .jpg/.png). Không được tự bịa hoặc đoán imageUrl. Nếu không xác minh được URL ảnh công khai hợp lệ thì trả về "imageUrl": "".
-Chỉ trả về một JSON array hợp lệ. Không dùng Markdown, không thêm giải thích, tiêu đề hoặc bất kỳ nội dung nào ngoài JSON.
-NỘI DUNG:
-[NỘI DUNG CẦN TRÍCH XUẤT]
-Mỗi mục phải có cấu trúc sau:
-[
-{
-"word": "từ hoặc cụm từ tiếng Anh",
-"type": "word | phrase | phrasal_verb | collocation",
-"pronunciation": "/phiên âm IPA/",
-"meanings": [
-"nghĩa tiếng Việt chính xác trong ngữ cảnh",
-"nghĩa tiếng Việt bổ sung nếu thực sự cần thiết"
-],
-"partOfSpeech": "noun | verb | adjective | adverb | noun phrase | verb phrase | adjective phrase | phrasal verb",
-"examples": [
-{
-"en": "câu ví dụ tiếng Anh tự nhiên, đúng ngữ pháp và có chứa từ hoặc cụm từ đang học",
-"vi": "bản dịch tiếng Việt chính xác của câu ví dụ tiếng Anh"
-}
-],
-"topic": "[CHỦ ĐỀ]",
-"level": "[TRÌNH ĐỘ]",
-"synonyms": [
-"từ hoặc cụm từ đồng nghĩa phù hợp với ngữ cảnh"
-],
-"antonyms": [
-"từ hoặc cụm từ trái nghĩa phù hợp với ngữ cảnh"
-],
-"note": "ghi chú ngắn gọn về cách dùng, cấu trúc, giới từ đi kèm, lỗi thường gặp hoặc mẹo ghi nhớ",
-"imageUrl": "https://.../anh-minh-hoa.jpg"
-}
-]
-YÊU CẦU:
-Ưu tiên các từ và cụm từ quan trọng đối với việc đọc hiểu, viết và giao tiếp ở trình độ đã cho.
-Trích xuất cả:
-từ đơn;
-cụm danh từ;
-cụm động từ;
-phrasal verb;
-collocation;
-từ nối và cụm học thuật quan trọng.
-Giữ nguyên các cụm từ có ý nghĩa hoàn chỉnh. Không tự ý tách một cụm thành nhiều từ riêng nếu việc tách làm mất nghĩa hoặc cách dùng.
-Ví dụ:
-giữ "the combined effect" là một cụm;
-giữ "play a crucial role in" là một cụm;
-giữ "contribute to" là một cụm;
-giữ "as a result" là một cụm.
-Không trích xuất:
-từ quá cơ bản không có giá trị học tập;
-tên riêng;
-số liệu;
-từ bị lặp;
-từ không có ý nghĩa rõ ràng khi đứng riêng;
-các biến thể ngữ pháp không cần thiết của cùng một từ.
-Nếu một từ xuất hiện ở dạng số nhiều, chia thì hoặc biến đổi, hãy đưa về dạng từ điển phù hợp, trừ khi đó là một cụm cố định.
-Nghĩa tiếng Việt phải dựa trên đúng ngữ cảnh của nội dung, không liệt kê quá nhiều nghĩa không liên quan.
-Mỗi câu ví dụ phải:
-có chứa chính xác từ hoặc cụm từ đang học;
-tự nhiên và đúng ngữ pháp;
-phù hợp với trình độ "[TRÌNH ĐỘ]";
-liên quan đến chủ đề "[CHỦ ĐỀ]";
-có bản dịch tiếng Việt tương ứng.
-Trường "pronunciation" phải dùng IPA chuẩn:
-dùng phát âm Anh-Anh hoặc Anh-Mỹ nhất quán;
-với cụm từ, cung cấp phiên âm cho toàn bộ cụm;
-không tự tạo phiên âm nếu không chắc chắn.
-Trường "synonyms" và "antonyms":
-chỉ thêm từ thực sự phù hợp với nghĩa trong ngữ cảnh;
-không thêm từ gần nghĩa nhưng khác cách sử dụng;
-nếu không có từ phù hợp, trả về mảng rỗng [].
-Trường "note" nên ưu tiên một hoặc nội dung sau:
-cấu trúc thường dùng;
-giới từ đi kèm;
-collocation;
-sự khác biệt với từ dễ nhầm;
-lỗi người học thường mắc;
-mẹo ghi nhớ ngắn gọn.
-Không để thiếu bất kỳ trường nào.
-Không sử dụng giá trị null.
-Không thêm dấu phẩy thừa ở phần tử cuối.
-Không đặt JSON trong dấu \`\`\`.
-Kết quả phải là JSON hợp lệ và có thể parse trực tiếp.`;
+  const IMPORT_PROMPT_BASIC = buildImportPrompt(false);
+  const IMPORT_PROMPT_FULL = buildImportPrompt(true);
 
   const activePrompt = importMode === 'full' ? IMPORT_PROMPT_FULL : IMPORT_PROMPT_BASIC;
 
