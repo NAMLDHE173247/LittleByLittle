@@ -42,13 +42,14 @@ function getCoverGradient(color: string): string {
 
 interface DecksPageProps {
   decks: any[]
+  metadata?: any
   fetchDecks: () => Promise<void>
   fetchVocabularies: () => Promise<void>
   fetchMetadata: () => Promise<void>
   onDeckClick?: (deckId: string) => void
 }
 
-export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchMetadata, onDeckClick }: DecksPageProps) {
+export default function DecksPage({ decks, metadata, fetchDecks, fetchVocabularies, fetchMetadata, onDeckClick }: DecksPageProps) {
   const { authHeaders } = useAuth()
 
   const [showDeckModal, setShowDeckModal] = useState(false)
@@ -170,6 +171,17 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
     finally { setDeleting(false) }
   }
 
+  const systemDeck = {
+    _id: "all",
+    name: "Tất cả từ vựng",
+    description: "Toàn bộ từ vựng và cụm từ trong kho của bạn",
+    color: "#8B5CF6",
+    wordCount: metadata?.total || 0,
+    isSystem: true,
+  };
+
+  const displayDecks = [systemDeck, ...decks];
+
   return (
     <div className="decks-container">
       {/* ===== Facebook-style Page Header ===== */}
@@ -185,16 +197,12 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
 
       {/* ===== Feed ===== */}
       <div className="deck-feed">
-        {decks.length === 0 ? (
-          <div className="deck-empty">
-            <RectangleStackIcon className="empty-icon" />
-            <p>Chưa có bộ thẻ nào. Hãy tạo bộ thẻ đầu tiên để sắp xếp từ vựng của bạn một cách khoa học nhé!</p>
-            <button className="btn-create-deck" style={{ marginTop: '4px' }} onClick={() => openDeckModal()}>
-              <PlusIcon className="icon icon-inline" /> Tạo bộ thẻ ngay
-            </button>
+        {decks.length === 0 && (
+          <div className="deck-empty" style={{ gridColumn: '1 / -1', marginBottom: '16px', padding: '24px' }}>
+            <p style={{ color: 'var(--text-secondary)' }}>Bạn chưa có bộ thẻ tùy chỉnh nào. Hãy tạo bộ thẻ để tổ chức từ vựng nhé!</p>
           </div>
-        ) : (
-          decks.map(deck => {
+        )}
+        {displayDecks.map(deck => {
             const wordCount = deck.wordCount || 0
             return (
               <div
@@ -236,7 +244,7 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                 </div>
 
                 {/* Progress bar (visual flair) */}
-                {wordCount > 0 && (
+                {wordCount > 0 && !deck.isSystem && (
                   <div className="fb-card-progress-wrap">
                     <div className="fb-card-progress-bar">
                       <div
@@ -267,35 +275,38 @@ export default function DecksPage({ decks, fetchDecks, fetchVocabularies, fetchM
                     <EyeIcon className="action-icon" />
                     <span>Xem</span>
                   </button>
-                  <button
-                    className="fb-action-btn edit"
-                    onClick={(e) => { e.stopPropagation(); openDeckModal(deck) }}
-                    title="Sửa bộ thẻ"
-                  >
-                    <PencilSquareIcon className="action-icon" />
-                    <span>Chỉnh sửa</span>
-                  </button>
-                  <button
-                    className="fb-action-btn export"
-                    onClick={(e) => { e.stopPropagation(); openExportModal(deck) }}
-                    title="Xuất bộ thẻ"
-                  >
-                    <ArrowUpTrayIcon className="action-icon" />
-                    <span>Xuất</span>
-                  </button>
-                  <button
-                    className="fb-action-btn delete"
-                    onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck) }}
-                    title="Xóa bộ thẻ"
-                  >
-                    <TrashIcon className="action-icon" />
-                    <span>Xóa</span>
-                  </button>
+                  {!deck.isSystem && (
+                    <>
+                      <button
+                        className="fb-action-btn edit"
+                        onClick={(e) => { e.stopPropagation(); openDeckModal(deck) }}
+                        title="Sửa bộ thẻ"
+                      >
+                        <PencilSquareIcon className="action-icon" />
+                        <span>Chỉnh sửa</span>
+                      </button>
+                      <button
+                        className="fb-action-btn export"
+                        onClick={(e) => { e.stopPropagation(); openExportModal(deck) }}
+                        title="Xuất bộ thẻ"
+                      >
+                        <ArrowUpTrayIcon className="action-icon" />
+                        <span>Xuất</span>
+                      </button>
+                      <button
+                        className="fb-action-btn delete"
+                        onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck) }}
+                        title="Xóa bộ thẻ"
+                      >
+                        <TrashIcon className="action-icon" />
+                        <span>Xóa</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )
-          })
-        )}
+          })}
       </div>
 
       {/* ===== Create/Edit Modal ===== */}

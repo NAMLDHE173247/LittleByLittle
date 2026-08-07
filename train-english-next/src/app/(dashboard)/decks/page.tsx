@@ -5,7 +5,7 @@ import { useGlobalData } from '@/components/providers/GlobalDataProvider';
 import DecksPage from '@/components/features/Decks/DecksPage';
 
 export default function DecksRoute() {
-  const { decks, fetchDecks, fetchVocabularies, fetchMetadata, setFilterDeck } = useGlobalData();
+  const { decks, fetchDecks, fetchVocabularies, fetchMetadata, setFilterDeck, metadata } = useGlobalData();
   const router = useRouter();
 
   const handleDeckClick = (deckId: string) => {
@@ -15,6 +15,7 @@ export default function DecksRoute() {
   return (
     <DecksPage
       decks={decks}
+      metadata={metadata}
       fetchDecks={fetchDecks}
       fetchVocabularies={fetchVocabularies}
       fetchMetadata={fetchMetadata}

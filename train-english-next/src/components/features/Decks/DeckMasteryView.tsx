@@ -118,11 +118,13 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
 
     try {
       const params = new URLSearchParams({
-        deckId,
         search: debouncedSearch,
         page: String(page),
         limit: String(PAGE_LIMIT),
       });
+      if (deckId !== "all") {
+        params.set("deckId", deckId);
+      }
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/progress/words?${params}`, {
         headers: authHeaders(),

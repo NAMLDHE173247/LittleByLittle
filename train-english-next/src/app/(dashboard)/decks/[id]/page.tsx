@@ -39,6 +39,16 @@ export default function DeckMasteryRoute() {
     if (!deckId) return;
 
     const fetchDeckInfo = async () => {
+      if (deckId === "all") {
+        setDeck({
+          _id: "all",
+          name: "Tất cả từ vựng",
+          description: "Toàn bộ từ vựng và cụm từ trong kho của bạn",
+          color: "#8B5CF6",
+        });
+        setLoading(false);
+        return;
+      }
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/decks/${deckId}`, {
           headers: authHeaders(),
@@ -62,18 +72,35 @@ export default function DeckMasteryRoute() {
 
     const fetchAllWords = async () => {
       try {
-        const params = new URLSearchParams({
-          deckId,
-          page: "1",
-          limit: "2000",
-        });
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/progress/words?${params}`, {
-          headers: authHeaders(),
-        });
-        const json = await res.json();
-        if (json.success) {
-          setAllWords(json.data.words || []);
-        }
+        let allFetchedWords: any[] = [];
+        let currentPage = 1;
+        let totalPages = 1;
+
+        do {
+          const paramsObj: any = {
+            page: String(currentPage),
+            limit: "100",
+          };
+          if (deckId !== "all") {
+            paramsObj.deckId = deckId;
+          }
+          const params = new URLSearchParams(paramsObj);
+          
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/progress/words?${params}`, {
+            headers: authHeaders(),
+          });
+          const json = await res.json();
+          
+          if (json.success && json.data) {
+            allFetchedWords = [...allFetchedWords, ...(json.data.words || [])];
+            totalPages = json.data.pagination?.totalPages || 1;
+          } else {
+            break;
+          }
+          currentPage++;
+        } while (currentPage <= totalPages);
+
+        setAllWords(allFetchedWords);
       } catch (err) {
         console.error("Failed to fetch all words for flashcards", err);
       } finally {
