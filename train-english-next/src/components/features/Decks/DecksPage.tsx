@@ -79,7 +79,7 @@ export default function DecksPage({ decks, metadata, fetchDecks, fetchVocabulari
     await exportVocabularies({
       format,
       content: exportContent,
-      query: { deck: exportDeck._id },
+      query: exportDeck._id === 'all' ? {} : { deck: exportDeck._id },
       filenameBase: exportDeck.name,
     });
     // Do not close modal automatically here to ensure exporting state is visible
@@ -88,7 +88,8 @@ export default function DecksPage({ decks, metadata, fetchDecks, fetchVocabulari
   const handleCopyWords = async () => {
     if (!exportDeck) return
     setCopiedWords(false)
-    const copied = await copyVocabularyWords({ deck: exportDeck._id })
+    const query = exportDeck._id === 'all' ? {} : { deck: exportDeck._id }
+    const copied = await copyVocabularyWords(query)
     setCopiedWords(copied)
   }
 
@@ -276,32 +277,32 @@ export default function DecksPage({ decks, metadata, fetchDecks, fetchVocabulari
                     <span>Xem</span>
                   </button>
                   {!deck.isSystem && (
-                    <>
-                      <button
-                        className="fb-action-btn edit"
-                        onClick={(e) => { e.stopPropagation(); openDeckModal(deck) }}
-                        title="Sửa bộ thẻ"
-                      >
-                        <PencilSquareIcon className="action-icon" />
-                        <span>Chỉnh sửa</span>
-                      </button>
-                      <button
-                        className="fb-action-btn export"
-                        onClick={(e) => { e.stopPropagation(); openExportModal(deck) }}
-                        title="Xuất bộ thẻ"
-                      >
-                        <ArrowUpTrayIcon className="action-icon" />
-                        <span>Xuất</span>
-                      </button>
-                      <button
-                        className="fb-action-btn delete"
-                        onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck) }}
-                        title="Xóa bộ thẻ"
-                      >
-                        <TrashIcon className="action-icon" />
-                        <span>Xóa</span>
-                      </button>
-                    </>
+                    <button
+                      className="fb-action-btn edit"
+                      onClick={(e) => { e.stopPropagation(); openDeckModal(deck) }}
+                      title="Sửa bộ thẻ"
+                    >
+                      <PencilSquareIcon className="action-icon" />
+                      <span>Chỉnh sửa</span>
+                    </button>
+                  )}
+                  <button
+                    className="fb-action-btn export"
+                    onClick={(e) => { e.stopPropagation(); openExportModal(deck) }}
+                    title="Xuất bộ thẻ"
+                  >
+                    <ArrowUpTrayIcon className="action-icon" />
+                    <span>Xuất</span>
+                  </button>
+                  {!deck.isSystem && (
+                    <button
+                      className="fb-action-btn delete"
+                      onClick={(e) => { e.stopPropagation(); setDeleteDeckTarget(deck) }}
+                      title="Xóa bộ thẻ"
+                    >
+                      <TrashIcon className="action-icon" />
+                      <span>Xóa</span>
+                    </button>
                   )}
                 </div>
               </div>

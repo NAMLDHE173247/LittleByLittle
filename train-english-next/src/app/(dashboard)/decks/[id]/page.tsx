@@ -91,12 +91,13 @@ export default function DeckMasteryRoute() {
           });
           const json = await res.json();
           
-          if (json.success && json.data) {
-            allFetchedWords = [...allFetchedWords, ...(json.data.words || [])];
-            totalPages = json.data.pagination?.totalPages || 1;
-          } else {
-            break;
+          if (!res.ok || !json.success || !json.data) {
+            throw new Error(json.message || `Failed to fetch page ${currentPage}`);
           }
+          
+          allFetchedWords = [...allFetchedWords, ...(json.data.words || [])];
+          totalPages = json.data.pagination?.totalPages || 1;
+          
           currentPage++;
         } while (currentPage <= totalPages);
 
