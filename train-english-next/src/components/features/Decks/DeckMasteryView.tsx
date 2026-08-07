@@ -310,7 +310,7 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
               <tr>
                 <th>Từ vựng</th>
                 <th>Nghĩa</th>
-                <th>Trạng thái học</th>
+                <th>Thông thạo tổng thể</th>
                 <th>Recall</th>
               </tr>
             </thead>
@@ -339,21 +339,30 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
                       </div>
                     </td>
                     <td>
-                      <span className={hasMeanings ? "dm-meanings" : "dm-meanings dm-muted"}>
-                        {hasMeanings ? item.meanings!.join(", ") : "Chưa có nghĩa"}
-                      </span>
+                      <div className={hasMeanings ? "dm-meanings" : "dm-meanings dm-muted"}>
+                        {hasMeanings 
+                          ? item.meanings!.map((m, idx) => (
+                              <span key={idx} className="dm-meaning-chip">{m.trim()}</span>
+                            ))
+                          : "Chưa có nghĩa"}
+                      </div>
                     </td>
                     <td>
-                      <span
-                        className="dm-tier-badge"
-                        style={{
-                          backgroundColor: `${tierConfig.color}18`,
-                          color: tierConfig.color,
-                          border: `1px solid ${tierConfig.color}40`,
-                        }}
-                      >
-                        {tierConfig.label}
-                      </span>
+                      <div className="dm-tier-overall-wrap">
+                        <span
+                          className="dm-tier-badge"
+                          style={{
+                            backgroundColor: `${tierConfig.color}18`,
+                            color: tierConfig.color,
+                            border: `1px solid ${tierConfig.color}40`,
+                          }}
+                        >
+                          {tierConfig.label}
+                        </span>
+                        <span className="dm-overall-score" style={{ color: tierConfig.color }}>
+                          • {item.overall ?? 0}
+                        </span>
+                      </div>
                     </td>
                     <td>{renderScore(item)}</td>
                   </tr>
@@ -542,7 +551,8 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
         .dm-table-container {
           overflow-x: auto;
           border: 1px solid var(--border);
-          border-radius: 8px;
+          border-radius: 14px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         }
 
         .dm-table {
@@ -554,7 +564,7 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
 
         .dm-table th,
         .dm-table td {
-          padding: 16px 20px;
+          padding: 16px 24px;
           border-bottom: 1px solid var(--border);
           vertical-align: middle;
         }
@@ -565,11 +575,12 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
           color: var(--text-secondary);
           font-size: 13px;
           text-transform: uppercase;
-          letter-spacing: 0;
+          letter-spacing: 0.5px;
+          border-bottom: 2px solid var(--border);
         }
 
         .dm-table tbody tr {
-          transition: background 0.2s;
+          transition: background 0.2s ease;
         }
 
         .dm-table tbody tr:hover {
@@ -627,26 +638,49 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
         }
 
         .dm-meanings {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .dm-meaning-chip {
+          background: var(--bg-body);
+          border: 1px solid var(--border);
+          padding: 4px 10px;
+          border-radius: 16px;
+          font-size: 13px;
           color: var(--text-secondary);
-          font-size: 14px;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
+          white-space: nowrap;
         }
 
         .dm-muted {
           color: var(--text-muted);
           font-style: italic;
+          padding: 4px 0;
+          font-size: 14px;
+        }
+
+        .dm-tier-overall-wrap {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .dm-overall-score {
+          font-size: 14px;
+          font-weight: 700;
+          opacity: 0.9;
         }
 
         .dm-tier-badge {
           display: inline-block;
-          padding: 5px 10px;
+          padding: 6px 12px;
           border-radius: 999px;
           font-size: 12px;
           font-weight: 700;
           text-transform: uppercase;
+          letter-spacing: 0.5px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.02);
         }
 
         .dm-recall-cell {
@@ -675,12 +709,15 @@ export default function DeckMasteryView({ deckId, deck }: DeckMasteryViewProps) 
           overflow: hidden;
           border-radius: 999px;
           background-color: var(--border);
+          box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
         }
 
         .dm-recall-bar {
           height: 100%;
           min-width: 3px;
           border-radius: inherit;
+          background-image: linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0));
+          transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .dm-recall-val {

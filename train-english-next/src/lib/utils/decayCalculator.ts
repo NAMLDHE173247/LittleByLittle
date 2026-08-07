@@ -226,12 +226,12 @@ export function calculateAnswerPoints(
     }
   } else {
     // Penalty theo tier
-    if (currentPoints >= 80) { // Mastered
+    if (currentPoints >= 80) { // Mastered -> Learning hoặc Not Started
+      change = -80;
+    } else if (currentPoints >= 40) { // Familiar -> Learning hoặc Not Started
       change = -40;
-    } else if (currentPoints >= 40) { // Familiar
+    } else { // Learning -> giảm mạnh; về 0 nếu điểm hiện tại <= 20
       change = -20;
-    } else { // Learning or Not Started
-      change = -10;
     }
   }
 
